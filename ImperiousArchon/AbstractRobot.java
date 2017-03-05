@@ -11,10 +11,24 @@ public abstract class AbstractRobot {
     BulletInfo[] bullets; //Cached result from senseNearbyBullets
     MapLocation rallyPoint = null;
 
+    boolean DEBUG;
 
-    public AbstractRobot(RobotController rc)
+
+    public AbstractRobot(RobotController rc, boolean dbug)
     {
-        this.rc= rc;
+        this.rc= rc; this.DEBUG = dbug;
+    }
+
+    void indicate(MapLocation loc, int R,int G, int B)
+    {
+        if (DEBUG)
+            rc.setIndicatorDot(loc,R,G,B);
+    }
+
+    void indicateLine(MapLocation from, MapLocation to, int R, int G, int B)
+    {
+        if (DEBUG)
+            rc.setIndicatorLine(from, to , R,G,B);
     }
 
     abstract void run() throws GameActionException;
@@ -49,6 +63,116 @@ public abstract class AbstractRobot {
         return rc.getType().bodyRadius + RobotType.LUMBERJACK.strideRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS;
     }
 
+
+    void randomWalk() throws GameActionException {
+        Direction dir = Utils.randomDirection();
+        tryMove(rc.getLocation().add(dir, rc.getType().strideRadius), 0, 0, 0);
+    }
+
+    boolean tryMove(MapLocation to) throws GameActionException {
+        return tryMove(to, 22, 4, 4);
+    }
+
+    boolean tryMove(MapLocation to, float degreeOffset, int checksLeft, int checksRight) throws GameActionException {
+        if (rc.hasMoved() || to == null)
+            return false;
+
+        MapLocation here = rc.getLocation();
+        Direction dir = here.directionTo(to);
+        float dist = here.distanceTo(to);
+        MapLocation dest = to;
+
+        if (dir == null || dist <= 0 || here.equals(to))
+            return true;
+
+        if (dist > rc.getType().strideRadius)
+        {
+            dist = rc.getType().strideRadius;
+            dest = here.add(dir, dist);
+        }
+
+        MapLocation bestUnsafe = null;
+        float leastDamage = 1000;
+        float damage;
+
+        // First, try intended direction
+        if (rc.canMove(dest))
+        {
+            damage = damageAtLocation(dest);
+            if (damage > 0 && damage < leastDamage)
+            {
+                leastDamage = damage;
+                bestUnsafe = dest;
+            }
+            if (damage == 0)
+            {
+                rc.move(dest);
+                //setIndicator(here, dest, 0, 255, 0);
+                return true;
+            }
+        }
+
+        // Now try a bunch of similar angles
+        int currentCheck = 1;
+        int checksPerSide = Math.max(checksLeft, checksRight);
+
+
+        while(currentCheck<=checksPerSide)
+        {
+            // Try the offset of the left side
+            if (currentCheck <= checksLeft)
+            {
+                dest = here.add(dir.rotateLeftDegrees(degreeOffset*currentCheck), dist);
+                if (rc.canMove(dest))
+                {
+                    damage = damageAtLocation(dest);
+                    if (damage > 0 && damage < leastDamage)
+                    {
+                        leastDamage = damage;
+                        bestUnsafe = dest;
+                    }
+                    if (damage == 0)
+                    {
+                        rc.move(dest);
+                        //setIndicator(here, dest, 0, 255, 0);
+                        return true;
+                    }
+                }
+            }
+
+            // Try the offset on the right side
+            if (currentCheck <= checksRight)
+            {
+                dest = here.add(dir.rotateRightDegrees(degreeOffset*currentCheck), dist);
+                if (rc.canMove(dest))
+                {
+                    damage = damageAtLocation(dest);
+                    if (damage > 0 && damage < leastDamage)
+                    {
+                        leastDamage = damage;
+                        bestUnsafe = dest;
+                    }
+                    if (damage == 0)
+                    {
+                        rc.move(dest);
+                        //setIndicator(here, dest, 0, 255, 0);
+                        return true;
+                    }
+                }
+            }
+            // No move performed, try slightly further
+            currentCheck++;
+        }
+
+        if (bestUnsafe != null && leastDamage <= damageAtLocation(here) && rc.canMove(bestUnsafe)) { //Not safe here so happy to move to another unsafe place
+            rc.move(bestUnsafe);
+            //setIndicator(here, bestUnsafe, 255, 0, 0);
+            return true;
+        }
+
+        // A move never happened, so return false.
+        return false;
+    }
     /*
     * shoot works out the optimum fire pattern based on the size of the target and its distance from us then shoots
     * avoiding friendly fire
@@ -58,7 +182,6 @@ public abstract class AbstractRobot {
     */
     void shoot(RobotInfo target) throws GameActionException
     {
-        //debug(1, "Shooting at " + target);
 
         if (target == null || !haveAmmo())
             return;
@@ -71,6 +194,7 @@ public abstract class AbstractRobot {
 
         if (shot < 0)
         {
+            rc.setIndicatorLine(rc.getLocation(),target.getLocation() ,255,0,0);
             //System.out.print("couldnt fire");
             return;
         }
@@ -350,6 +474,9 @@ public abstract class AbstractRobot {
         if (!rc.getType().canAttack())
             return false;
         if (!enemy.getType().canAttack())
+            return true;
+
+        if (rc.getType()!=RobotType.LUMBERJACK && enemy.type == RobotType.LUMBERJACK)
             return true;
 
         int turnsToKill = (int) (enemy.getHealth() / rc.getType().attackPower);

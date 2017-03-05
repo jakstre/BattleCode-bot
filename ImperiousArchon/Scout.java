@@ -3,19 +3,15 @@ import battlecode.common.*;
 
 public class Scout extends AbstractRobot {
 
-    public boolean SHOOTJACKS = false;
-    public boolean DEBUG_SCOUT = true;
+    public boolean SHOOTJACKS = true;
 
-    public Scout(RobotController rc)
+
+    public Scout(RobotController rc,boolean dbug)
     {
-        super(rc);
+        super(rc,dbug);
     }
 
-    void indicate(MapLocation loc, int R,int G, int B)
-    {
-        if (DEBUG_SCOUT)
-            rc.setIndicatorDot(loc,R,G,B);
-    }
+
 
     public void run() throws GameActionException
     {
@@ -52,17 +48,17 @@ public class Scout extends AbstractRobot {
                             if (rc.getLocation().distanceTo(archons[(archon_to_visit + nearest) % archons.length]) < rc.getType().strideRadius)
                                 archon_to_visit++;
                             tryMove(archons[(archon_to_visit + nearest) % archons.length]);
-                            //debug(2, "Moving to next archon " + archons[(archon_to_visit+nearest)%archons.length]);
                         }
                     }
                 }
 
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
-                System.out.print(Clock.getBytecodesLeft());
+                if (DEBUG)
+                    System.out.print(Clock.getBytecodesLeft());
                 Clock.yield();
 
             } catch (Exception e) {
-                //debug(1, "Scout Exception");
+
                 e.printStackTrace();
             }
         }
@@ -70,14 +66,6 @@ public class Scout extends AbstractRobot {
     }
 
 
-    void randomWalk() throws GameActionException {
-
-
-        //debug(2, "Wandering");
-        Direction dir = Utils.randomDirection();
-
-        tryMove(rc.getLocation().add(dir, rc.getType().strideRadius), 0, 0, 0);
-    }
 
 
     void checkShake() throws GameActionException
@@ -114,120 +102,13 @@ public class Scout extends AbstractRobot {
         }
     }
 
-    boolean tryMove(MapLocation to) throws GameActionException {
-        return tryMove(to, 22, 4, 4);
-    }
-
-    boolean tryMove(MapLocation to, float degreeOffset, int checksLeft, int checksRight) throws GameActionException {
-        if (rc.hasMoved() || to == null)
-            return false;
-
-        MapLocation here = rc.getLocation();
-        Direction dir = here.directionTo(to);
-        float dist = here.distanceTo(to);
-        MapLocation dest = to;
-
-        if (dir == null || dist <= 0 || here == to)
-            return true;
-
-        if (dist > rc.getType().strideRadius) {
-            dist = rc.getType().strideRadius;
-            dest = here.add(dir, dist);
-        }
-
-        MapLocation bestUnsafe = null;
-        float leastDamage = 1000;
-        float damage;
-
-        // First, try intended direction
-        if (rc.canMove(dest)) {
-            damage = damageAtLocation(dest);
-            if (damage > 0 && damage < leastDamage) {
-                leastDamage = damage;
-                bestUnsafe = dest;
-            }
-            if (damage == 0) {
-                rc.move(dest);
-                //setIndicator(here, dest, 0, 255, 0);
-                return true;
-            }
-        }
-
-        // Now try a bunch of similar angles
-        int currentCheck = 1;
-        int checksPerSide = Math.max(checksLeft, checksRight);
-
-        //debug(3, "tryMove: checking " + checksPerSide + " locations (" + checksLeft + " left and " + checksRight + " right)");
-
-        while(currentCheck<=checksPerSide)
-        {
-            // Try the offset of the left side
-            if (currentCheck <= checksLeft)
-            {
-                dest = here.add(dir.rotateLeftDegrees(degreeOffset*currentCheck), dist);
-                if (rc.canMove(dest))
-                {
-                    damage = damageAtLocation(dest);
-                    if (damage > 0 && damage < leastDamage)
-                    {
-                        leastDamage = damage;
-                        bestUnsafe = dest;
-                    }
-                    if (damage == 0)
-                    {
-                        rc.move(dest);
-                        //setIndicator(here, dest, 0, 255, 0);
-                        return true;
-                    }
-                }
-            }
-
-            // Try the offset on the right side
-            if (currentCheck <= checksRight)
-            {
-                dest = here.add(dir.rotateRightDegrees(degreeOffset*currentCheck), dist);
-                if (rc.canMove(dest))
-                {
-                    damage = damageAtLocation(dest);
-                    if (damage > 0 && damage < leastDamage)
-                    {
-                        leastDamage = damage;
-                        bestUnsafe = dest;
-                    }
-                    if (damage == 0)
-                    {
-                        rc.move(dest);
-                        //setIndicator(here, dest, 0, 255, 0);
-                        return true;
-                    }
-                }
-            }
-            // No move performed, try slightly further
-            currentCheck++;
-        }
-
-        if (bestUnsafe != null && leastDamage <= damageAtLocation(here) && rc.canMove(bestUnsafe)) { //Not safe here so happy to move to another unsafe place
-            rc.move(bestUnsafe);
-            //setIndicator(here, bestUnsafe, 255, 0, 0);
-            return true;
-        }
-
-        // A move never happened, so return false.
-        return false;
-    }
-
-
-
-
-
-
 
     /*
     * A tree is safe if we can hide in it
     * That means there has to be room
     */
     boolean isTreeSafe(TreeInfo t) throws GameActionException {
-        if (Clock.getBytecodesLeft() < 1000) //This routine can take time so return false if we are short on time
+        if (Clock.getBytecodesLeft() < 2000) //This routine can take time so return false if we are short on time
             return false;
 
         if (t.getHealth() <= 10)
@@ -239,13 +120,22 @@ public class Scout extends AbstractRobot {
         //For trees the same size as us they are safe if no lumberjack is in range and no unit with bullets is within a stride of the tree edge
         for (RobotInfo r: robots)
         {
-            if (r.type==RobotType.SCOUT)
-            {
-                float distanceToTree = r.getLocation().distanceTo(t.getLocation());
-                float gapBetween = distanceToTree - t.getRadius() - r.getType().bodyRadius;
-                if (gapBetween < 0)
-                { //Occupied
-                    indicate(t.getLocation(),255,0,0);
+            float distanceToTree = r.getLocation().distanceTo(t.getLocation());
+            float gapBetween = distanceToTree - t.getRadius() - r.getType().bodyRadius;
+            if (gapBetween < 0)
+            { //Occupied
+                //setIndicator(t.getLocation(),255,128,128);
+                return false;
+            }
+            if (r.getTeam() != rc.getTeam() && r.getType().canAttack())
+            { //Enemy
+                float dangerDist = r.getType().strideRadius;
+                if (r.getType() == RobotType.LUMBERJACK)
+                    dangerDist += GameConstants.LUMBERJACK_STRIKE_RADIUS;
+                else
+                    dangerDist += GameConstants.BULLET_SPAWN_OFFSET;
+                if (gapBetween <= dangerDist) {
+                    //setIndicator(t.getLocation(), 255,0,0);
                     return false;
                 }
             }
@@ -272,10 +162,14 @@ public class Scout extends AbstractRobot {
 
         RobotInfo target = null;
 
+        float allyPower = 0f;
+        float enemyPower = 0f;
+
         for (RobotInfo r:robots)
         {
             if (r.getTeam() == enemy)
             {
+                enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
                     nearestGardener = r;
                 else if (nearestArchon == null && r.getType() == RobotType.ARCHON)
@@ -287,6 +181,8 @@ public class Scout extends AbstractRobot {
                 if (nearestEnemy == null)
                     nearestEnemy = r;
             }
+            else
+                allyPower+=Utils.unitStrength(r.type);
         }
 
         if (nearestEnemy == null)
@@ -309,7 +205,8 @@ public class Scout extends AbstractRobot {
 
         // If there is a threat ...
        // TODO this is simplyfication
-        if (nearestDanger != null && canSenseMe(nearestDanger)) {
+        if (nearestDanger != null && canSenseMe(nearestDanger))
+        {
             MapLocation dangerLoc = nearestDanger.getLocation();
 
             //If we are a scout then find the nearest available tree to shoot from
@@ -325,12 +222,13 @@ public class Scout extends AbstractRobot {
             }
 
 
-            if (nearestTree != null) { //Scouts can hide in trees
+            if (nearestTree != null)
+            { //Scouts can hide in trees
                 indicate(rc.getLocation(),0,255,0);
 
                 float bulletOffset = GameConstants.BULLET_SPAWN_OFFSET / 2;
                 float dist = nearestTree.radius - RobotType.SCOUT.bodyRadius - bulletOffset;
-                if (dist >= 0)
+                //if (dist >= 0)
                     combatPosition = nearestTree.getLocation().add(nearestTree.getLocation().directionTo(dangerLoc), dist);
                 //else
                 //    combatPosition = nearestTree.getLocation().add(nearestTree.getLocation().directionTo(dangerLoc).opposite(), -dist);
@@ -346,39 +244,32 @@ public class Scout extends AbstractRobot {
             }
             else
             {
-                if (nearestLumberjack != null)
+                if (nearestLumberjack != null && myLocation.distanceTo(nearestLumberjack.getLocation()) < safeDistance)
                 {
-                    if (myLocation.distanceTo(nearestLumberjack.getLocation()) < safeDistance)
-                        combatPosition = nearestLumberjack.getLocation().add(nearestLumberjack.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
-                    else
-                    {
-                        if (SHOOTJACKS)
-                            combatPosition = nearestLumberjack.getLocation().add(nearestLumberjack.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                    indicate(rc.getLocation(),255,0,0);
+                    combatPosition = nearestLumberjack.getLocation().add(nearestLumberjack.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                    target = nearestDanger;
                         /*
-                        else
-                        {
-                            safeDistance = RobotType.SCOUT.sensorRadius;
-                            combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                      safeDistance = RobotType.SCOUT.sensorRadius;
+                      combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
                         }*/
-                    }
-                    if (SHOOTJACKS)
-                        target = nearestDanger;
+
                     //shoot(nearestLumberjack);
                 }
-                if (!nearestDanger.equals(nearestLumberjack) && canBeat(nearestDanger))
+                else if (canBeat(nearestDanger)&& allyPower>=enemyPower)
                 {
-                    indicate(nearestDanger.location,255,0,255);
+                    indicate(dangerLoc,255,0,255);
                     combatPosition = dangerLoc.add(dangerLoc.directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
                     target = nearestDanger;
                     //shoot(nearestDanger);
                 }
-                else if (canShootMe(nearestDanger))
+                else if (canShootMe(nearestDanger) || allyPower<enemyPower)
                 {
+                    //run
                     indicate(rc.getLocation(),255,0,0);
-                    RobotType t = nearestDanger.getType();
                     // safeDistance = t.sensorRadius + RobotType.SCOUT.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
                     safeDistance = RobotType.SCOUT.sensorRadius;
-                    combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                    combatPosition = rc.getLocation().add(dangerLoc.directionTo(myLocation), safeDistance);
                 }
                 else return false;
             }
@@ -391,7 +282,7 @@ public class Scout extends AbstractRobot {
             {
                 indicate(nearestGardener.getLocation(),0,0,255);
                 target=nearestGardener;
-                safeDistance = 2*RobotType.SCOUT.bodyRadius +target.type.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
+                safeDistance = RobotType.SCOUT.bodyRadius +target.type.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
                 combatPosition = target.getLocation().add(target.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
 
                 //shoot(nearestGardener);
@@ -402,7 +293,7 @@ public class Scout extends AbstractRobot {
                 if (rc.getTeamBullets()>700)
                 {
                     target = nearestArchon;
-                    safeDistance+=target.getRadius()/2;
+                    safeDistance+=RobotType.SCOUT.bodyRadius +target.type.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
                     //shoot(nearestArchon);
                     combatPosition = target.getLocation().add(target.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
                 }

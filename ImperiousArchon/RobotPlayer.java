@@ -26,13 +26,13 @@ public strictfp class RobotPlayer {
                 runGardener();
                 break;
             case SOLDIER:
-                runSoldier();
+                new Soldier(rc,true).run();
                 break;
             case LUMBERJACK:
                 runLumberjack();
                 break;
             case SCOUT:
-                new Scout(rc).run();
+                new Scout(rc,true).run();
         }
     }
 
@@ -88,8 +88,12 @@ public strictfp class RobotPlayer {
                 Direction dir = randomDirection();
 
                 // Randomly attempt to build a soldier or lumberjack in this direction
-                if (rc.canBuildRobot(RobotType.SCOUT, dir) && Math.random() < 0.03) {
+                if (rc.canBuildRobot(RobotType.SCOUT, dir) && Math.random() < 0.01) {
                     rc.buildRobot(RobotType.SCOUT, dir);
+                }
+
+                if (rc.canBuildRobot(RobotType.SOLDIER, dir) && Math.random() < 0.01) {
+                    rc.buildRobot(RobotType.SOLDIER, dir);
                 }
                /*  else if (rc.canBuildRobot(RobotType.LUMBERJACK, dir) && Math.random() < .01 && rc.isBuildReady()) {
                     rc.buildRobot(RobotType.LUMBERJACK, dir);
