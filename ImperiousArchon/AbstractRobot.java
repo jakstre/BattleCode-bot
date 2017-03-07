@@ -2,62 +2,190 @@ package ImperiousArchon;
 import battlecode.common.*;
 
 /**
- * Created by jakub on 02.03.2017.
+ * Base class for all the robots in the game.
  */
-public abstract class AbstractRobot {
+abstract class AbstractRobot {
+
+    int startRound;
+    MapLocation startLocation;
+    MapLocation currentLocation;
+    MapLocation lastLocation;
+    float currentSpeed;
+    float defenceDist;
+    MapLocation[] ourInitialArchonLocations;
+    MapLocation[] enemyInitialArchonLocations;
+    MapLocation ourArchonsCentroid, enemyArchonsCentroid;
+    float enemyCentroidDirection;
     RobotController rc;
     RobotInfo[] robots; //Cached result from senseNearbyRobots
     TreeInfo[] trees; //Cached result from senseNearbyTree
     BulletInfo[] bullets; //Cached result from senseNearbyBullets
     MapLocation rallyPoint = null;
+    Team ourTeam, enemyTeam;
 
-    boolean DEBUG;
 
+    AbstractRobot(RobotController rc) {
+        this.rc = rc;
 
-    public AbstractRobot(RobotController rc, boolean dbug)
-    {
-        this.rc= rc; this.DEBUG = dbug;
+        ourTeam = rc.getTeam();
+        enemyTeam = ourTeam.opponent();
+        startLocation = rc.getLocation();
+        startRound = rc.getRoundNum();
+        ourInitialArchonLocations = rc.getInitialArchonLocations(ourTeam);
+        enemyInitialArchonLocations = rc.getInitialArchonLocations(enemyTeam);
+        ourArchonsCentroid = countCentroid(ourInitialArchonLocations);
+        enemyArchonsCentroid = countCentroid(enemyInitialArchonLocations);
+        Direction _enemyCentroidDirection = ourArchonsCentroid.directionTo(enemyArchonsCentroid);
+        if (_enemyCentroidDirection.radians < 0) {
+            enemyCentroidDirection = (float) (_enemyCentroidDirection.radians + 2 * Math.PI);
+        } else {
+            enemyCentroidDirection = _enemyCentroidDirection.radians;
+        }
+//        defenceDist = Math.max(40, ourArchonsCentroid.distanceTo(enemyArchonsCentroid) * 0.3f);
+        defenceDist = Math.max(30, getFarthestEnemyArchonDistance() * 0.3f);
     }
 
-    void indicate(MapLocation loc, int R,int G, int B)
-    {
-        if (DEBUG)
-            rc.setIndicatorDot(loc,R,G,B);
+    private MapLocation countCentroid(MapLocation[] locations) {
+        float x = 0, y = 0;
+        for (MapLocation location : locations) {
+            x += location.x;
+            y += location.y;
+        }
+
+        return new MapLocation(x / locations.length, y / locations.length);
     }
 
-    void indicateLine(MapLocation from, MapLocation to, int R, int G, int B)
-    {
-        if (DEBUG)
-            rc.setIndicatorLine(from, to , R,G,B);
-    }
-
-    abstract void run() throws GameActionException;
-
-    void checkWin() throws GameActionException {
+    /**
+     * Handles the whole donating strategy.
+     */
+    private void handleDonation() {
         // Go for the win if we have enough bullets
         int vps = rc.getTeamVictoryPoints();
         float bullets = rc.getTeamBullets();
         float exchangeRate =  rc.getVictoryPointCost();
-        if (rc.getRoundNum() >= rc.getRoundLimit()-1
-                || (int)(bullets/exchangeRate) + vps >= GameConstants.VICTORY_POINTS_TO_WIN)
-        {
-            rc.donate(bullets);
-        } else if (bullets > 1000 && rc.getRoundNum() > 200)
-        {
-            //Only donate when surplus
-            int newVps = (int)((bullets - 1000)/exchangeRate);
-            rc.donate(newVps*exchangeRate);
+
+        try {
+            /* Game ends on the next turn, or we have enough bullets to win right now */
+            if (rc.getRoundNum() >= rc.getRoundLimit() - 1
+                    || (int) (bullets / exchangeRate) + vps >= GameConstants.VICTORY_POINTS_TO_WIN) {
+                rc.donate(bullets);
+            } else if (bullets > 1000 && rc.getRoundNum() > 200) {
+                /* We have surplus of bullets, let's donate them */
+                int newVps = (int) ((bullets - 1000) / exchangeRate);
+                rc.donate(newVps * exchangeRate);
+            }
+        } catch (GameActionException e) {
+            System.err.println("Improper amount for donation! " + e.getMessage());
         }
     }
 
-    void sense() throws GameActionException {
+    void makePath(Float direction, int sightRange) {
+        MapLocation origin = currentLocation;
+        final int range = sightRange;
+        final int step = 2;
+        int row;
+        for (int i = -range; i < range; i += step) {
+            row = 0;
+            for (int j = -range; j < range; j += step) {
+                MapLocation shift = origin.translate(i + ((row % 2 == 0) ? -0 / 2f : 0f), j);
+                if (origin.distanceTo(shift) < sightRange) {
+                    if (rc.canMove(shift)) {
+                        indicate(shift, 10, 10, 128);
+                    } else {
+                        indicate(shift, 128, 10, 10);
+                    }
+                }
+                ++row;
+            }
+        }
+        indicate(origin.add(direction), 10, 128, 10);
+        try {
+            tryMove(origin.add(direction));
+        } catch (GameActionException e) {
+            e.printStackTrace();
+        }
+//        rc.canMove()
+    }
+
+    float getClosestOurArchonDistance() {
+        float dist = Float.POSITIVE_INFINITY;
+        for (MapLocation ourInitialArchonLocation : ourInitialArchonLocations) {
+            float _dist = rc.getLocation().distanceTo(ourInitialArchonLocation);
+            if (_dist < dist) {
+                dist = _dist;
+            }
+        }
+        return dist;
+    }
+
+    float getFarthestEnemyArchonDistance() {
+        float dist = Float.NEGATIVE_INFINITY;
+        for (MapLocation ourInitialArchonLocation : enemyInitialArchonLocations) {
+            float _dist = rc.getLocation().distanceTo(ourInitialArchonLocation);
+            if (_dist > dist) {
+                dist = _dist;
+            }
+        }
+        return dist;
+    }
+
+    float getClosestEnemyArchonDistance() {
+        float dist = Float.POSITIVE_INFINITY;
+        for (MapLocation enemyInitialArchonLocation : enemyInitialArchonLocations) {
+            float _dist = rc.getLocation().distanceTo(enemyInitialArchonLocation);
+            if (_dist < dist) {
+                dist = _dist;
+            }
+        }
+        return dist;
+    }
+
+    void indicate(MapLocation loc, int R,int G, int B) {
+        if (RobotPlayer.DEBUG) {
+            rc.setIndicatorDot(loc, R, G, B);
+        }
+    }
+
+    void indicateLine(MapLocation from, MapLocation to, int R, int G, int B) {
+        if (RobotPlayer.DEBUG) {
+            rc.setIndicatorLine(from, to, R, G, B);
+        }
+    }
+
+    abstract void run() throws GameActionException;
+
+    private void preCalculate() {
         robots = rc.senseNearbyRobots();
         trees = rc.senseNearbyTrees();
         bullets = rc.senseNearbyBullets();
-
+        currentLocation = rc.getLocation();
+        if (lastLocation != null) {
+            currentSpeed = currentLocation.distanceSquaredTo(lastLocation);
+        }
     }
 
+    /**
+     * Should be called at the start of the main robot round loop.
+     */
+    void preloop() throws GameActionException {
+        handleDonation();
+        preCalculate();
+        readBroadcast();
+    }
 
+    /**
+     * Should be called at the end of the main robot round loop.
+     */
+    void postloop() {
+        System.out.print(Clock.getBytecodesLeft());
+        lastLocation = currentLocation;
+
+        /* Clock.yield() makes the robot wait until the next turn,
+         then it will perform this loop again */
+        Clock.yield();
+    }
+
+    abstract void readBroadcast() throws GameActionException;
 
     float lumberjackRange() {
         return rc.getType().bodyRadius + RobotType.LUMBERJACK.strideRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS;
@@ -70,7 +198,8 @@ public abstract class AbstractRobot {
     }
 
     boolean tryMove(MapLocation to) throws GameActionException {
-        return tryMove(to, 22, 4, 4);
+        indicateLine(currentLocation, to, 16, 128, 16);
+        return tryMove(to, 22, 5, 5);
     }
 
     boolean tryMove(MapLocation to, float degreeOffset, int checksLeft, int checksRight) throws GameActionException {

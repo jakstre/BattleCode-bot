@@ -5,24 +5,25 @@ import battlecode.common.*;
 /**
  * Created by jakub on 05.03.2017.
  */
-public class Soldier extends  AbstractRobot
+class Soldier extends  AbstractRobot
 {
 
-    public Soldier(RobotController rc, boolean dbug)
+    Soldier(RobotController rc)
     {
-        super(rc,dbug);
+        super(rc);
     }
+
     @Override
     void run() throws GameActionException
     {
         MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
         rallyPoint = archons[0];
         // The code you want your robot to perform every round should be in this loop
+        //noinspection InfiniteLoopStatement
         while (true) {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
-                //checkWin();
-                sense();
+                preloop();
 
                 boolean fought = fight();
                 if (!fought)
@@ -35,9 +36,7 @@ public class Soldier extends  AbstractRobot
                     randomWalk();
                 }
 
-                // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
-                Clock.yield();
-
+                postloop();
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -151,6 +150,11 @@ public class Soldier extends  AbstractRobot
         if(target!=null)
             shoot(target);
         return true;
+    }
+
+    @Override
+    void readBroadcast() {
+        /* ignoring... */
     }
 
 }

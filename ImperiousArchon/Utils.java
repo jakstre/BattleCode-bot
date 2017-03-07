@@ -3,9 +3,9 @@ package ImperiousArchon;
 import battlecode.common.*;
 
 /**
- * Created by jakub on 03.03.2017.
+ * General utilities for all sort of helpful things.
  */
-public class Utils {
+class Utils {
 
     static float unitStrength(RobotType type)
     {
@@ -26,8 +26,33 @@ public class Utils {
         return null;
     }
 
+    /**
+     * Calculates a random {@link Direction}.
+     *
+     * @return The random {@link Direction}.
+     */
     static Direction randomDirection() {
-        return new Direction((float)Math.random() * 2 * (float)Math.PI);
+        return new Direction((float) Math.random() * 2 * (float) Math.PI);
+    }
+
+    /**
+     * Tries to find available {@link Direction} from the current position.
+     * Runs only specified maximum number of times.
+     *
+     * @param rc {@link RobotController} of the robot to check.
+     * @param maxAttempts Maximum number of attempts to find the not-obstructed direction.
+     * @return Found non-obstructed {@link Direction} or null on fail.
+     */
+    static Direction randomAvailableDirection(RobotController rc, int maxAttempts) {
+        Direction dir;
+        MapLocation origin = rc.getLocation();
+        for (int i = 0; i < maxAttempts; i++) {
+            dir = randomDirection();
+            if (rc.canMove(origin.add(dir))) {
+                return dir;
+            }
+        }
+        return null;
     }
 
 

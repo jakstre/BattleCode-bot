@@ -1,17 +1,16 @@
 package ImperiousArchon;
 import battlecode.common.*;
 
+import static ImperiousArchon.RobotPlayer.DEBUG;
+
 public class Scout extends AbstractRobot {
 
     public boolean SHOOTJACKS = true;
 
 
-    public Scout(RobotController rc,boolean dbug)
-    {
-        super(rc,dbug);
+    Scout(RobotController rc) {
+        super(rc);
     }
-
-
 
     public void run() throws GameActionException
     {
@@ -29,12 +28,12 @@ public class Scout extends AbstractRobot {
         }
 
         // The code you want your robot to perform every round should be in this loop
+        //noinspection InfiniteLoopStatement
         while (true)
         {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
-                checkWin();
-                sense();
+                preloop();
                 boolean fought = fight();
 
                 if (!fought) {
@@ -55,8 +54,7 @@ public class Scout extends AbstractRobot {
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
                 if (DEBUG)
                     System.out.print(Clock.getBytecodesLeft());
-                Clock.yield();
-
+                postloop();
             } catch (Exception e) {
 
                 e.printStackTrace();
@@ -65,7 +63,10 @@ public class Scout extends AbstractRobot {
 
     }
 
-
+    @Override
+    void readBroadcast() {
+        /* ignoring... */
+    }
 
 
     void checkShake() throws GameActionException
