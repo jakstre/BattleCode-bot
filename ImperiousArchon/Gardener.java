@@ -3,10 +3,11 @@ package ImperiousArchon;
 import battlecode.common.*;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
+import static ImperiousArchon.Utils.BUILD_CHANNEL;
 import static ImperiousArchon.Utils.randomAvailableDirection;
-import static ImperiousArchon.Utils.randomDirection;
 
 /**
  * Class providing implementation of AI for Gardeners.
@@ -27,7 +28,6 @@ class Gardener extends AbstractRobot {
     }
 
     private Direction lastTreeDirection;
-//    private int numTrees;
     private int wantedTrees = MAX_TREES;
     private int numBuild[] = new int[RobotPlayer.orderedTypes.length];
     private int[] wantedRobots = {10, 0, 3, 2};
@@ -35,6 +35,7 @@ class Gardener extends AbstractRobot {
     private GardenerState state = GardenerState.POSITIONING;
     private Float myDirection;
     private List<TreeInfo> myTrees = new ArrayList<>();
+    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.SOLDIER);
 
 
     /**
@@ -62,6 +63,9 @@ class Gardener extends AbstractRobot {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
                 preloop();
+
+                /* Check if some units have to be build */
+                checkPriorityBuilds();
 
                 switch (state) {
                     case POSITIONING:
@@ -100,8 +104,19 @@ class Gardener extends AbstractRobot {
         }
     }
 
+    private void checkPriorityBuilds() throws GameActionException {
+        int buildIndex = rc.readBroadcastInt(BUILD_CHANNEL);
+        if (buildIndex < toBuild.size()) {
+            Direction dir = randomAvailableDirection(rc, 10);
+            if (rc.canBuildRobot(toBuild.get(buildIndex), dir)) {
+                rc.buildRobot(toBuild.get(buildIndex), dir);
+                rc.broadcast(BUILD_CHANNEL, buildIndex + 1);
+            }
+        }
+    }
+
     private void tryBuild() throws GameActionException {
-        Direction dir = randomDirection();
+        Direction dir = randomAvailableDirection(rc, 10);
         for (RobotType orderedType : RobotPlayer.orderedTypes) {
             int robotID = RobotPlayer.typeToInt.get(orderedType);
             if (numBuild[robotID] < wantedRobots[robotID]
@@ -207,14 +222,13 @@ class Gardener extends AbstractRobot {
                 return;
             }
         }
-//        System.out.println("speed = " + currentSpeed);
-//        makePath(myDirection, 7);
+
+        /* Find path away from the Archon towards the enemy */
         newtonPath();
 
-//        if (getClosestOurArchonDistance() > defenceDist) {
         /* Probability to change state increases with distance and with time */
         if (0.3 * getClosestOurArchonDistance() / defenceDist
-                > Math.random() + 0.12 * Math.max(0, 1 - (rc.getRoundNum() - startMovingRound) / 42)) {
+                > Math.random() + 0.12 * Math.max(0, 1 - (rc.getRoundNum() - startMovingRound) / (42 + toBuild.size() * 20))) {
             if (Math.random() < 0.8) {
                 state = GardenerState.MOTHER;
             } else {

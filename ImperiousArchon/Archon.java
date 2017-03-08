@@ -4,6 +4,8 @@ import battlecode.common.Direction;
 import battlecode.common.GameActionException;
 import battlecode.common.RobotController;
 
+import static ImperiousArchon.Utils.DIRECTION_CHANNEL;
+
 /**
  * Class providing implementation of AI for Archons.
  */
@@ -38,14 +40,6 @@ class Archon extends AbstractRobot {
             try {
                 preloop();
 
-//                indicateLine(ourArchonsCentroid, ourArchonsCentroid.add(enemyCentroidDirection, 100), 0,200,0);
-//                for (int i = 0; i < 10; i++) {
-//                    System.out.println("random: " + randomDir());
-//                }
-//                System.out.println("main dir = " + enemyCentroidDirection);
-//                indicate(ourArchonsCentroid, 1, 200, 1);
-//                indicate(enemyArchonsCentroid, 200, 1, 1);
-
                 if (RobotPlayer.DEBUG) {
                     for (int i = 0; i < NUM_ANGLES; i++) {
                         float angle = (float) (2f * Math.PI / NUM_ANGLES * i);
@@ -66,7 +60,7 @@ class Archon extends AbstractRobot {
                 /* Randomly attempt to build a gardener in this direction */
                 if (numGardeners < MAX_GARDENERS && rc.canHireGardener(dir) && Math.random() < .05) {
                     rc.hireGardener(dir);
-                    rc.broadcastFloat(0, randomDir());
+                    rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
                     ++numGardeners;
                 }
 
