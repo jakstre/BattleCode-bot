@@ -39,7 +39,6 @@ public strictfp class RobotPlayer {
                 break;
             case GARDENER:
                 new Gardener(rc).run();
-               // runGardener();
                 break;
             case SOLDIER:
                 new Soldier(rc).run();
@@ -49,9 +48,10 @@ public strictfp class RobotPlayer {
                 break;
             case SCOUT:
                 new Scout(rc).run();
-
+                break;
             case TANK:
                 new Tank(rc).run();
+                break;
         }
     }
 

@@ -30,12 +30,12 @@ class Gardener extends AbstractRobot {
     private Direction lastTreeDirection;
     private int wantedTrees = MAX_TREES;
     private int numBuild[] = new int[RobotPlayer.orderedTypes.length];
-    private int[] wantedRobots = {10, 0, 3, 2};
-    private float[] buildProbs = {0.02f, 0.0f, 0.01f, 0f};
+    private int[] wantedRobots = {10, 3, 2, 2};
+    private float[] buildProbs = {0.04f, 0.02f, 0.01f, 0f};
     private GardenerState state = GardenerState.POSITIONING;
     private Float myDirection;
     private List<TreeInfo> myTrees = new ArrayList<>();
-    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.TANK, RobotType.SOLDIER);
+    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.SOLDIER);
 
 
     /**
@@ -108,7 +108,7 @@ class Gardener extends AbstractRobot {
         int buildIndex = rc.readBroadcastInt(BUILD_CHANNEL);
         if (buildIndex < toBuild.size()) {
             Direction dir = buildingDirection(toBuild.get(buildIndex), 10, 25);
-            if (dir!=null) {
+            if (dir != null) {
                 rc.buildRobot(toBuild.get(buildIndex), dir);
                 rc.broadcast(BUILD_CHANNEL, buildIndex + 1);
             }
@@ -116,13 +116,15 @@ class Gardener extends AbstractRobot {
     }
 
     private void tryBuild() throws GameActionException {
-
-        for (RobotType orderedType : RobotPlayer.orderedTypes)
-        {
+        for (RobotType orderedType : RobotPlayer.orderedTypes) {
             Direction dir = buildingDirection(orderedType, 12,25);
+            if (dir == null) {
+                continue;
+            }
+
             int robotID = RobotPlayer.typeToInt.get(orderedType);
             if (numBuild[robotID] < wantedRobots[robotID]
-                    && dir !=null
+                    && rc.canBuildRobot(orderedType, dir)
                     && Math.random() < buildProbs[robotID]) {
                 rc.buildRobot(orderedType, dir);
                 ++numBuild[robotID];
@@ -135,8 +137,9 @@ class Gardener extends AbstractRobot {
     private void tryBuild(RobotType type) throws GameActionException
     {
         Direction buildDir = buildingDirection(type, 12,25);
-        if (buildDir!=null)
+        if (buildDir != null) {
             rc.buildRobot(type, buildDir);
+        }
     }
 
     private void tryWater() throws GameActionException {
@@ -238,7 +241,7 @@ class Gardener extends AbstractRobot {
 
         /* Probability to change state increases with distance and with time */
         if (0.3 * getClosestOurArchonDistance() / defenceDist
-                > Math.random() + 0.12 * Math.max(0, 1 - (rc.getRoundNum() - startMovingRound) / (42 + toBuild.size() * 20))) {
+                > Math.random() + 0.12 * Math.max(0, 1 - (rc.getRoundNum() - startMovingRound) / (42 + toBuild.size() * 15))) {
             if (Math.random() < 0.8) {
                 state = GardenerState.MOTHER;
             } else {

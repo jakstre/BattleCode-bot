@@ -12,7 +12,7 @@ import static ImperiousArchon.Utils.DIRECTION_CHANNEL;
 class Archon extends AbstractRobot {
 
     private final static int NUM_ANGLES = 360 / 4;
-    private final static int MAX_GARDENERS = 10;
+    private final static int MAX_GARDENERS = 7;
 
     private int numGardeners;
     private float[] cumSum;
@@ -54,13 +54,15 @@ class Archon extends AbstractRobot {
                     }
                 }
 
-                /* Generate a random direction with custom distribution */
-                //Direction dir = new Direction(randomDir());
-                randomWalk();
-                Direction dir = hiringDirection(12,25);
+                /* Move away from enemy */
+                Direction walkDir = new Direction((float) (enemyCentroidDirection + Math.PI));
+                if (rc.canMove(walkDir)) {
+                    rc.move(walkDir);
+                }
 
-                /* Randomly attempt to build a gardener in this direction */
-                if (numGardeners < MAX_GARDENERS && dir!=null && Math.random() < .05) {
+                /* Randomly attempt to build a gardener in available direction */
+                Direction dir = new Direction(randomDir());
+                if (numGardeners < MAX_GARDENERS && rc.canHireGardener(dir) && Math.random() < .05) {
                     rc.hireGardener(dir);
                     rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
                     ++numGardeners;

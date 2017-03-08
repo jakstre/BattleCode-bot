@@ -197,7 +197,7 @@ abstract class AbstractRobot {
      * Should be called at the end of the main robot round loop.
      */
     void postloop() {
-        System.out.print(Clock.getBytecodesLeft());
+//        System.out.print(Clock.getBytecodesLeft());
         lastLocation = currentLocation;
 
         /* Clock.yield() makes the robot wait until the next turn,
