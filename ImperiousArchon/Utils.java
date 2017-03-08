@@ -60,7 +60,7 @@ class Utils {
     * Code copied from server to calculate if a bullet will hit an object
     */
     static float calcHitDist(MapLocation bulletStart, MapLocation bulletFinish,
-                      MapLocation targetCenter, float targetRadius)
+                             MapLocation targetCenter, float targetRadius)
     {
         final float minDist = 0;
         final float maxDist = bulletStart.distanceTo(bulletFinish);

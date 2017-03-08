@@ -22,6 +22,9 @@ abstract class AbstractRobot {
     BulletInfo[] bullets; //Cached result from senseNearbyBullets
     MapLocation rallyPoint = null;
     Team ourTeam, enemyTeam;
+    boolean blocked = false;
+    boolean left = false;
+    boolean DEBUG = true;
 
 
     AbstractRobot(RobotController rc) {
@@ -141,13 +144,13 @@ abstract class AbstractRobot {
     }
 
     void indicate(MapLocation loc, int R,int G, int B) {
-        if (RobotPlayer.DEBUG) {
+        if (DEBUG) {
             rc.setIndicatorDot(loc, R, G, B);
         }
     }
 
     void indicateLine(MapLocation from, MapLocation to, int R, int G, int B) {
-        if (RobotPlayer.DEBUG) {
+        if (DEBUG) {
             rc.setIndicatorLine(from, to, R, G, B);
         }
     }
@@ -173,6 +176,24 @@ abstract class AbstractRobot {
         readBroadcast();
     }
 
+    void checkShake() throws GameActionException
+    {
+
+        if (!rc.canShake())
+            return;
+        for (TreeInfo t:trees)
+        {
+            if (t.getContainedBullets() > 0)
+            {
+                if (rc.canShake(t.getID()))
+                    rc.shake(t.getID());
+                else
+                    tryMove(t.getLocation());
+                return;
+            }
+        }
+    }
+
     /**
      * Should be called at the end of the main robot round loop.
      */
@@ -183,6 +204,135 @@ abstract class AbstractRobot {
         /* Clock.yield() makes the robot wait until the next turn,
          then it will perform this loop again */
         Clock.yield();
+    }
+
+    /*
+   * Checks to see if we can move here
+   * Uses rc.canMove and then performs extra checks for a TANK unit as we don't want to destroy our own trees
+   */
+    boolean canMove(MapLocation dest) throws GameActionException {
+
+        if (!rc.canMove(dest))
+            return false;
+        return true;
+    }
+
+    boolean moveTo(MapLocation dest) throws GameActionException {
+        if (blocked)
+            return wallMove(dest);
+        else
+        {
+            boolean moved =tryMove(dest);
+            if (!moved)
+                setBlocked(dest);
+            return moved;
+        }
+    }
+
+    void setBlocked(MapLocation target) {
+        blocked = true;
+        left = (rc.getLocation().directionTo(target).radiansBetween(rc.getLocation().directionTo(target)) > 0);
+    }
+
+    boolean wallMove(MapLocation dest) throws GameActionException {
+        //Find nearest object blocking on the side we are following - a tree, robot or edge of map
+        MapLocation blocker = null;
+        float distance = 0;
+        TreeInfo wallTree = null; // This is the "wall" we are following
+        float treeDist = 20;
+        RobotInfo wallRobot = null;
+        float robotDist = 20;
+        float bestAngle = 10;
+        Direction dir =rc.getLocation().directionTo(dest);
+
+        for (TreeInfo t:trees) {
+            distance = rc.getLocation().distanceTo(t.getLocation()) - t.getRadius();
+            if (distance > treeDist)
+                break;
+            float angle = dir.radiansBetween(rc.getLocation().directionTo(t.getLocation()));
+            if ((left && angle >= 0) || (!left && angle <= 0)) {
+                if (distance < treeDist || Math.abs(angle) < bestAngle) {
+                    treeDist = distance;
+                    wallTree = t;
+                    bestAngle = Math.abs(angle);
+                }
+            }
+        }
+
+        for (RobotInfo r:robots) {
+            distance = rc.getLocation().distanceTo(r.getLocation()) - r.getType().bodyRadius;
+            if (distance > robotDist)
+                break;
+            float angle = dir.radiansBetween(rc.getLocation().directionTo(r.getLocation()));
+            if ((left && angle >= 0) || (!left && angle <= 0)) {
+                robotDist = distance;
+                wallRobot = r;
+            }
+        }
+
+        if (wallTree != null && wallRobot != null) {
+            //Work out which is nearest
+            if (treeDist < robotDist) { //Tree is nearer
+                blocker = wallTree.getLocation();
+                distance = treeDist;
+                //setIndicator(rc.getLocation(), wallTree.getLocation(), 0, 0, 0);
+            } else {
+                blocker = wallRobot.getLocation();
+                distance = robotDist;
+                //setIndicator(rc.getLocation(), wallRobot.getLocation(), 0, 0, 0);
+            }
+        } else if (wallTree != null) {
+            blocker = wallTree.getLocation();
+            distance = treeDist;
+            //setIndicator(rc.getLocation(), wallTree.getLocation(), 0, 0, 0);
+        } else if (wallRobot != null) {
+            blocker = wallRobot.getLocation();
+            distance = robotDist;
+            //setIndicator(rc.getLocation(), wallRobot.getLocation(), 0, 0, 0);
+        }
+
+        //Check to see if the edge of the map is nearer
+        Direction north = Direction.NORTH;
+        int count = 0;
+        float testDistance = distance;
+        if (testDistance > rc.getType().sensorRadius - rc.getType().bodyRadius - GameConstants.BULLET_SPAWN_OFFSET)
+            testDistance = rc.getType().sensorRadius - rc.getType().bodyRadius - GameConstants.BULLET_SPAWN_OFFSET;
+        while (count < 4) {
+            MapLocation edge = rc.getLocation().add(north, testDistance);
+            if (!rc.onTheMap(edge, rc.getType().bodyRadius)) {
+                float angle = dir.radiansBetween(dir);
+                if ((left && angle >= 0) || (!left && angle <= 0)) {
+                    blocker = edge;
+                    break;
+                }
+            }
+            dir = dir.rotateLeftDegrees(90);
+            count++;
+        }
+
+        if (blocker != null) {
+            if (left)
+                dir = rc.getLocation().directionTo(blocker).rotateRightDegrees(90);
+            else
+                dir = rc.getLocation().directionTo(blocker).rotateLeftDegrees(90);
+        }
+
+        float diff = Math.abs(dir.radiansBetween(rc.getLocation().directionTo(dest)));
+        //setIndicator(rc.getLocation(), rc.getLocation().add(wanderDir, 3), 128, 128, 128);
+
+        if (diff > Math.PI/8) {
+            if (left) { //Keep the wall on our left
+                MapLocation towards = rc.getLocation().add(dir.rotateLeftDegrees(40), rc.getType().strideRadius);
+                return tryMove(towards, 20, 0, 14);
+            } else {
+                MapLocation towards = rc.getLocation().add(dir.rotateRightDegrees(40), rc.getType().strideRadius);
+                return tryMove(towards, 20, 14, 0);
+            }
+        } else {
+            //We can head towards real destination safely
+            blocked = false;
+            return tryMove(dest);
+        }
     }
 
     abstract void readBroadcast() throws GameActionException;
@@ -340,40 +490,35 @@ abstract class AbstractRobot {
             if (rc.canFireTriadShot() && dist <= target.getType().bodyRadius / Math.sin(Math.toRadians(GameConstants.TRIAD_SPREAD_DEGREES/2)))
             {
                 shotsToFire = 3;
-                //debug (3, "Firing 3 - 1 should hit");
             }
             else if (rc.canFirePentadShot() && dist <= target.getType().bodyRadius / Math.sin(Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES/2)))
             {
                 shotsToFire = 5;
-                //debug (3, "Firing 5 - 1 should hit");
             }
         }
         else if (rc.canFirePentadShot() && 2*spreadAngle >= Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES*4))
         { //All 5 shots will hit
             shotsToFire = 5;
-            //debug (3, "Firing 5 - all should hit");
+
         }
         else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES*3))
         { //4 shots will hit
             shotsToFire = 5;
             shotDir.rotateRightDegrees(GameConstants.PENTAD_SPREAD_DEGREES/2);
-            //debug (3, "Firing 5 - 4 should hit");
         }
         else if (rc.canFireTriadShot() && 2*spreadAngle > Math.toRadians(GameConstants.TRIAD_SPREAD_DEGREES*2))
         { //All 3 triad shots will hit
             shotsToFire = 3;
-            //debug (3, "Firing 3 - all should hit");
         }
         /*else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES*2))
         { //3 of 5 shots will hit)
             shotsToFire = 5;
-            //debug (3, "Firing 5 - 3 should hit");
         }*/
         else if (rc.canFireTriadShot() && 2*spreadAngle > Math.toRadians(GameConstants.TRIAD_SPREAD_DEGREES*2))
         { //2 of a triad shots will hit
             shotsToFire = 3;
             shotDir.rotateLeftDegrees(GameConstants.TRIAD_SPREAD_DEGREES/2);
-            //debug (3, "Firing 3 - 2 should hit");
+
         }
         /*
         else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES))
@@ -386,23 +531,21 @@ abstract class AbstractRobot {
         {
             shotsToFire = 1;
             rc.fireSingleShot(shotDir);
-            //debug (3, "Firing 1 shot");
         }
         if (shotsToFire == 5)
         {
             rc.firePentadShot(shotDir);
-            //debug(2, "Shooting 5 shots at " + target);
         }
         else if (shotsToFire == 3)
         {
             rc.fireTriadShot(shotDir);
-            //debug(2, "Shooting 3 shots at " + target);
         }
         if (shotsToFire > 0)
         { //We shot so update bullet info
             bullets = rc.senseNearbyBullets();
         }
     }
+
 
     /*
      * Check to see if a bullet fired from here will hit an enemy first (rather than a tree or an ally)

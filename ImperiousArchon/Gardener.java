@@ -30,8 +30,8 @@ class Gardener extends AbstractRobot {
 //    private int numTrees;
     private int wantedTrees = MAX_TREES;
     private int numBuild[] = new int[RobotPlayer.orderedTypes.length];
-    private int[] wantedRobots = {10, 0, 3, 2};
-    private float[] buildProbs = {0.02f, 0.0f, 0.01f, 0f};
+    private int[] wantedRobots = {100, 10, 100, 100};
+    private float[] buildProbs = {0.02f, 0.03f, 0.01f, 0.01f};
     private GardenerState state = GardenerState.POSITIONING;
     private Float myDirection;
     private List<TreeInfo> myTrees = new ArrayList<>();
@@ -100,18 +100,38 @@ class Gardener extends AbstractRobot {
         }
     }
 
+    //TODO quick and dirty patch
     private void tryBuild() throws GameActionException {
         Direction dir = randomDirection();
-        for (RobotType orderedType : RobotPlayer.orderedTypes) {
-            int robotID = RobotPlayer.typeToInt.get(orderedType);
-            if (numBuild[robotID] < wantedRobots[robotID]
-                    && rc.canBuildRobot(orderedType, dir)
-                    && Math.random() < buildProbs[robotID]) {
-                rc.buildRobot(orderedType, dir);
-                ++numBuild[robotID];
+        int attempts = 6;
+        for (RobotType orderedType : RobotPlayer.orderedTypes)
+        {
+            for (int i =0; i <attempts; i++) {
+                int robotID = RobotPlayer.typeToInt.get(orderedType);
+                Direction buildDir = dir.rotateLeftDegrees(20*i);
+                if (numBuild[robotID] < wantedRobots[robotID]
+                        && rc.canBuildRobot(orderedType, buildDir)
+                        && Math.random() < buildProbs[robotID]) {
+                    rc.buildRobot(orderedType, buildDir);
+                    ++numBuild[robotID];
+                }
             }
         }
         plant();
+    }
+
+    // build specific robot on demand
+    private void tryBuild(RobotType type) throws GameActionException
+    {
+        Direction dir = randomDirection();
+        int attempts = 6;
+        for (int i =0; i <attempts; i++) {
+            Direction buildDir = dir.rotateLeftDegrees(20*i);
+            if (rc.canBuildRobot(type, buildDir))
+            {
+                rc.buildRobot(type, buildDir);
+            }
+        }
     }
 
     private void tryWater() throws GameActionException {
@@ -201,6 +221,16 @@ class Gardener extends AbstractRobot {
     private int startMovingRound;
 
     private void takePosition() throws GameActionException {
+
+        if (rc.getRoundNum()<18)
+        {
+            tryBuild(RobotType.SCOUT);
+        }
+        else if (rc.getRoundNum()<30)
+        {
+            tryBuild(RobotType.SOLDIER);
+        }
+
         if (lastLocation != null && rc.getRoundNum() - startMovingRound > 1 && currentSpeed < 0.2) {
             if (numNotOurTreesVisible() > 3) {
                 state = GardenerState.LUMBERCAMPING;
