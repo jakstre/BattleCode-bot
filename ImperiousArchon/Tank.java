@@ -54,11 +54,11 @@ public class Tank extends  AbstractRobot
 
         if (!rc.canMove(dest))
             return false;
-        if (rc.getType() == RobotType.TANK) {
-            TreeInfo[] bump = rc.senseNearbyTrees(dest, RobotType.TANK.bodyRadius, rc.getTeam());
-            if (bump.length > 0)
-                return false;
-        }
+
+        TreeInfo[] bump = rc.senseNearbyTrees(dest, RobotType.TANK.bodyRadius, rc.getTeam());
+        if (bump != null && bump.length > 0)
+            return false;
+
 
         return true;
     }

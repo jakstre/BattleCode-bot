@@ -60,7 +60,7 @@ class Archon extends AbstractRobot {
                 Direction dir = hiringDirection(12,25);
 
                 /* Randomly attempt to build a gardener in this direction */
-                if (numGardeners < MAX_GARDENERS && rc.canHireGardener(dir) && Math.random() < .05) {
+                if (numGardeners < MAX_GARDENERS && dir!=null && Math.random() < .05) {
                     rc.hireGardener(dir);
                     rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
                     ++numGardeners;

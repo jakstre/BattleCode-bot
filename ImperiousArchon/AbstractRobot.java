@@ -509,23 +509,23 @@ abstract class AbstractRobot {
         { //All 3 triad shots will hit
             shotsToFire = 3;
         }
-        /*else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES*2))
+        else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES*2))
         { //3 of 5 shots will hit)
             shotsToFire = 5;
-        }*/
+        }
         else if (rc.canFireTriadShot() && 2*spreadAngle > Math.toRadians(GameConstants.TRIAD_SPREAD_DEGREES*2))
         { //2 of a triad shots will hit
             shotsToFire = 3;
             shotDir.rotateLeftDegrees(GameConstants.TRIAD_SPREAD_DEGREES/2);
 
         }
-        /*
+
         else if (rc.canFirePentadShot() && 2*spreadAngle > Math.toRadians(GameConstants.PENTAD_SPREAD_DEGREES))
         { //2 of 5 shots will hit
             shotsToFire = 5;
             shotDir.rotateRightDegrees(GameConstants.PENTAD_SPREAD_DEGREES/2);
             //debug (3, "Firing 5 - 2 should hit");
-        }*/
+        }
         else if (rc.canFireSingleShot())
         {
             shotsToFire = 1;

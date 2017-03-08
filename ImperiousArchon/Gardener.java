@@ -35,7 +35,7 @@ class Gardener extends AbstractRobot {
     private GardenerState state = GardenerState.POSITIONING;
     private Float myDirection;
     private List<TreeInfo> myTrees = new ArrayList<>();
-    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.SOLDIER);
+    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.TANK, RobotType.SOLDIER);
 
 
     /**
@@ -107,8 +107,8 @@ class Gardener extends AbstractRobot {
     private void checkPriorityBuilds() throws GameActionException {
         int buildIndex = rc.readBroadcastInt(BUILD_CHANNEL);
         if (buildIndex < toBuild.size()) {
-            Direction dir = randomAvailableDirection(rc, 10);
-            if (rc.canBuildRobot(toBuild.get(buildIndex), dir)) {
+            Direction dir = buildingDirection(toBuild.get(buildIndex), 10, 25);
+            if (dir!=null) {
                 rc.buildRobot(toBuild.get(buildIndex), dir);
                 rc.broadcast(BUILD_CHANNEL, buildIndex + 1);
             }
@@ -122,7 +122,7 @@ class Gardener extends AbstractRobot {
             Direction dir = buildingDirection(orderedType, 12,25);
             int robotID = RobotPlayer.typeToInt.get(orderedType);
             if (numBuild[robotID] < wantedRobots[robotID]
-                    && rc.canBuildRobot(orderedType, dir)
+                    && dir !=null
                     && Math.random() < buildProbs[robotID]) {
                 rc.buildRobot(orderedType, dir);
                 ++numBuild[robotID];
@@ -135,7 +135,8 @@ class Gardener extends AbstractRobot {
     private void tryBuild(RobotType type) throws GameActionException
     {
         Direction buildDir = buildingDirection(type, 12,25);
-        rc.buildRobot(type, buildDir);
+        if (buildDir!=null)
+            rc.buildRobot(type, buildDir);
     }
 
     private void tryWater() throws GameActionException {
