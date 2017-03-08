@@ -116,8 +116,10 @@ class Gardener extends AbstractRobot {
     }
 
     private void tryBuild() throws GameActionException {
-        Direction dir = randomAvailableDirection(rc, 10);
-        for (RobotType orderedType : RobotPlayer.orderedTypes) {
+
+        for (RobotType orderedType : RobotPlayer.orderedTypes)
+        {
+            Direction dir = buildingDirection(orderedType, 12,25);
             int robotID = RobotPlayer.typeToInt.get(orderedType);
             if (numBuild[robotID] < wantedRobots[robotID]
                     && rc.canBuildRobot(orderedType, dir)
@@ -132,15 +134,8 @@ class Gardener extends AbstractRobot {
     // build specific robot on demand
     private void tryBuild(RobotType type) throws GameActionException
     {
-        Direction dir = randomDirection();
-        int attempts = 6;
-        for (int i =0; i <attempts; i++) {
-            Direction buildDir = dir.rotateLeftDegrees(20*i);
-            if (rc.canBuildRobot(type, buildDir))
-            {
-                rc.buildRobot(type, buildDir);
-            }
-        }
+        Direction buildDir = buildingDirection(type, 12,25);
+        rc.buildRobot(type, buildDir);
     }
 
     private void tryWater() throws GameActionException {

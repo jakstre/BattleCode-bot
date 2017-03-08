@@ -55,7 +55,9 @@ class Archon extends AbstractRobot {
                 }
 
                 /* Generate a random direction with custom distribution */
-                Direction dir = new Direction(randomDir());
+                //Direction dir = new Direction(randomDir());
+                randomWalk();
+                Direction dir = hiringDirection(12,25);
 
                 /* Randomly attempt to build a gardener in this direction */
                 if (numGardeners < MAX_GARDENERS && rc.canHireGardener(dir) && Math.random() < .05) {

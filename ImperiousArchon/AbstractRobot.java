@@ -24,7 +24,6 @@ abstract class AbstractRobot {
     Team ourTeam, enemyTeam;
     boolean blocked = false;
     boolean left = false;
-    boolean DEBUG = true;
 
 
     AbstractRobot(RobotController rc) {
@@ -144,13 +143,13 @@ abstract class AbstractRobot {
     }
 
     void indicate(MapLocation loc, int R,int G, int B) {
-        if (DEBUG) {
+        if (RobotPlayer.DEBUG) {
             rc.setIndicatorDot(loc, R, G, B);
         }
     }
 
     void indicateLine(MapLocation from, MapLocation to, int R, int G, int B) {
-        if (DEBUG) {
+        if (RobotPlayer.DEBUG) {
             rc.setIndicatorLine(from, to, R, G, B);
         }
     }
@@ -770,5 +769,31 @@ abstract class AbstractRobot {
     boolean canSenseMe(RobotInfo enemy)
     {
         return  (enemy.getType().sensorRadius > enemy.getLocation().distanceTo(rc.getLocation()));
+    }
+
+    Direction buildingDirection(RobotType type, int maxAttempts, float angularOffset)
+    {
+        Direction enemyCentroidDirection = ourArchonsCentroid.directionTo(enemyArchonsCentroid);
+        for (int i =0; i <maxAttempts; i++) {
+            Direction buildDir = enemyCentroidDirection.rotateLeftDegrees(angularOffset*i);
+            if (rc.canBuildRobot(type, buildDir))
+            {
+                return buildDir;
+            }
+        }
+        return null;
+    }
+
+    Direction hiringDirection(int maxAttempts, float angularOffset)
+    {
+        Direction enemyCentroidDirection = ourArchonsCentroid.directionTo(enemyArchonsCentroid);
+        for (int i =0; i <maxAttempts; i++) {
+            Direction buildDir = enemyCentroidDirection.rotateLeftDegrees(angularOffset*i);
+            if (rc.canHireGardener(buildDir))
+            {
+                return buildDir;
+            }
+        }
+        return null;
     }
 }

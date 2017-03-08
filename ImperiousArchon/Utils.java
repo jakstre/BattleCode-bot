@@ -9,7 +9,6 @@ class Utils {
 
     public static final int BUILD_CHANNEL = 0;
     public static final int DIRECTION_CHANNEL = 1;
-
     static float unitStrength(RobotType type)
     {
         if (type.bulletSpeed > 0)
@@ -57,6 +56,7 @@ class Utils {
         }
         return null;
     }
+
 
 
     /*
