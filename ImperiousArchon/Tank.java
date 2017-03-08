@@ -5,10 +5,10 @@ import battlecode.common.*;
 /**
  * Created by jakub on 05.03.2017.
  */
-public class Soldier extends  AbstractRobot
+public class Tank extends  AbstractRobot
 {
 
-    public Soldier(RobotController rc)
+    public Tank(RobotController rc)
     {
         super(rc);
     }
@@ -27,8 +27,6 @@ public class Soldier extends  AbstractRobot
                 boolean fought = fight();
                 if (!fought)
                 {
-                    checkShake();
-
                     if (rallyPoint != null)
                     {
                         moveTo(rallyPoint);
@@ -46,10 +44,30 @@ public class Soldier extends  AbstractRobot
         }
     }
 
+
+    /*
+    * Checks to see if we can move here
+    * Uses rc.canMove and then performs extra checks for a TANK unit as we don't want to destroy our own trees
+    */
+    @Override
+    boolean canMove(MapLocation dest) throws GameActionException {
+
+        if (!rc.canMove(dest))
+            return false;
+        if (rc.getType() == RobotType.TANK) {
+            TreeInfo[] bump = rc.senseNearbyTrees(dest, RobotType.TANK.bodyRadius, rc.getTeam());
+            if (bump.length > 0)
+                return false;
+        }
+
+        return true;
+    }
+
     @Override
     void readBroadcast() throws GameActionException {
 
     }
+
 
     /*
     * Find the best target and the best position to shoot from
@@ -112,17 +130,17 @@ public class Soldier extends  AbstractRobot
                 target = nearestDanger;
                 //shoot(nearestDanger);
             }
-            else //if (canShootMe(nearestDanger))
+            else if (canShootMe(nearestDanger))
             {
                 indicate(rc.getLocation(),255,0,0);
                 RobotType t = nearestDanger.getType();
                 // safeDistance = t.sensorRadius + RobotType.SCOUT.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
-                safeDistance = t.sensorRadius;
+                safeDistance = rc.getType().sensorRadius;
                 combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
                 target = nearestDanger;
                 // call for help
             }
-            //else return false;
+            else return false;
         }
 
         else

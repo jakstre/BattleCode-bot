@@ -129,6 +129,20 @@ class Gardener extends AbstractRobot {
         plant();
     }
 
+    // build specific robot on demand
+    private void tryBuild(RobotType type) throws GameActionException
+    {
+        Direction dir = randomDirection();
+        int attempts = 6;
+        for (int i =0; i <attempts; i++) {
+            Direction buildDir = dir.rotateLeftDegrees(20*i);
+            if (rc.canBuildRobot(type, buildDir))
+            {
+                rc.buildRobot(type, buildDir);
+            }
+        }
+    }
+
     private void tryWater() throws GameActionException {
         /* Find a damaged tree with minimal health */
         TreeInfo worstTree = null;

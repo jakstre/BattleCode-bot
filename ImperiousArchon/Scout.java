@@ -1,16 +1,17 @@
 package ImperiousArchon;
 import battlecode.common.*;
 
-import static ImperiousArchon.RobotPlayer.DEBUG;
-
 public class Scout extends AbstractRobot {
 
     public boolean SHOOTJACKS = true;
 
 
-    Scout(RobotController rc) {
+    public Scout(RobotController rc)
+    {
         super(rc);
     }
+
+
 
     public void run() throws GameActionException
     {
@@ -28,7 +29,6 @@ public class Scout extends AbstractRobot {
         }
 
         // The code you want your robot to perform every round should be in this loop
-        //noinspection InfiniteLoopStatement
         while (true)
         {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
@@ -52,9 +52,10 @@ public class Scout extends AbstractRobot {
                 }
 
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
-                if (DEBUG)
-                    System.out.print(Clock.getBytecodesLeft());
+
+                //System.out.print(Clock.getBytecodesLeft());
                 postloop();
+
             } catch (Exception e) {
 
                 e.printStackTrace();
@@ -64,43 +65,8 @@ public class Scout extends AbstractRobot {
     }
 
     @Override
-    void readBroadcast() {
-        /* ignoring... */
-    }
+    void readBroadcast() throws GameActionException {
 
-
-    void checkShake() throws GameActionException
-    {
-        /*if (!rc.canShake())
-            return;
-
-        //Check to see if there is a tree in range that we can shake
-        //Head to the one with the most resources if we are a scout
-        TreeInfo bestTree = null;
-        for (TreeInfo t:trees) {
-            if (t.getContainedBullets() > 0) {
-                if (rc.canShake(t.getID()))
-                    rc.shake(t.getID());
-                else if (rc.getType() == RobotType.SCOUT && (bestTree == null || t.getContainedBullets() > bestTree.getContainedBullets()))
-                    bestTree = t;
-            }
-        }
-
-        if (bestTree != null)
-            tryMove(bestTree.getLocation());*/
-
-        if (!rc.canShake())
-            return;
-        for (TreeInfo t:trees)
-        {
-            if (t.getContainedBullets() > 0)
-            {
-                if (rc.canShake(t.getID()))
-                    rc.shake(t.getID());
-                else
-                    tryMove(t.getLocation());
-            }
-        }
     }
 
 
@@ -112,7 +78,7 @@ public class Scout extends AbstractRobot {
         if (Clock.getBytecodesLeft() < 2000) //This routine can take time so return false if we are short on time
             return false;
 
-        if (t.getHealth() <= 10)
+        if (t.getHealth() <= 20)
             return false;
 
         if (t.getRadius() < RobotType.SCOUT.bodyRadius) //Too small to hide in
@@ -191,16 +157,17 @@ public class Scout extends AbstractRobot {
             indicate(rc.getLocation(),255,255,255);
             return false;
         }
-        /*
+
         //dodge
-        if (damageAtLocation(rc.getLocation()) > 0) {
+        if (damageAtLocation(rc.getLocation()) > 0)
+        {
             //We are better off dodging by moving away
             shoot(nearestEnemy);
             safeDistance = nearestEnemy.getType().sensorRadius;// + rc.getType().bodyRadius + GameConstants.BULLET_SPAWN_OFFSET; //Move out of its sight radius
             MapLocation away = rc.getLocation().add(nearestEnemy.getLocation().directionTo(rc.getLocation()).rotateLeftDegrees(5), safeDistance);
             tryMove(away);
             return true;
-        }*/
+        }
 
         MapLocation combatPosition = null;
 
