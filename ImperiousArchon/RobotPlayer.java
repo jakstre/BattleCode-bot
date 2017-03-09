@@ -6,7 +6,7 @@ import java.util.HashMap;
 
 public strictfp class RobotPlayer {
 
-    static final boolean DEBUG = false;
+    static final boolean DEBUG = true;
 
     private static RobotController rc;
 

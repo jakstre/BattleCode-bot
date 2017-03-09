@@ -27,7 +27,7 @@ public class Soldier extends  AbstractRobot
                 boolean fought = fight();
                 if (!fought)
                 {
-                    checkShake();
+                    //checkShake();
 
                     if (rallyPoint != null)
                     {
