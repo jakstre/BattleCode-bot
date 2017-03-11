@@ -25,6 +25,9 @@ abstract class AbstractRobot {
     boolean avoidingObstacle = false;
     boolean wentLeft = false;
 
+    final int REPORT_CHANNEL = 10;
+    final int HELP_CHANNEL = 20;
+
 
 
     AbstractRobot(RobotController rc) {
@@ -56,6 +59,103 @@ abstract class AbstractRobot {
         }
 
         return new MapLocation(x / locations.length, y / locations.length);
+    }
+
+    void broadCastLocation(MapLocation loc, int offset) throws GameActionException
+    {
+        rc.broadcastFloat(offset,loc.x);
+        rc.broadcastFloat(offset+1,loc.y);
+    }
+
+    MapLocation readBroadCastLocation(int offset) throws  GameActionException
+    {
+        float x = rc.readBroadcastFloat(offset);
+        float y = rc.readBroadcastFloat(offset+1);
+        return new MapLocation(x,y);
+    }
+
+    void callHelp(MapLocation loc, float allyPower, float enemyPower) throws GameActionException {
+        int round = rc.readBroadcast(HELP_CHANNEL);
+        if (round == rc.getRoundNum())
+            //Someone else called for help this turn
+        {
+            float otherAllyPower = rc.readBroadcastFloat(HELP_CHANNEL +2);
+            float otherEnemyPower = rc.readBroadcastFloat(HELP_CHANNEL +3);
+            if (otherAllyPower/1.7 > allyPower)
+                //we are minor, dont call for help
+                return;
+            else  if (otherAllyPower>allyPower/2 && otherAllyPower/otherEnemyPower>0.65 && allyPower/enemyPower < 0.35)
+                //they are considerable and we are loosing hard, dont call for help
+                return;
+        }
+
+        rc.broadcast(HELP_CHANNEL, rc.getRoundNum());
+        rc.broadcast(HELP_CHANNEL +1,1);
+        rc.broadcastFloat(HELP_CHANNEL +2, allyPower);
+        rc.broadcastFloat(HELP_CHANNEL +3, enemyPower);
+        broadCastLocation(loc, HELP_CHANNEL +4);
+    }
+
+    boolean checkHelpCalls() throws GameActionException {
+        int round = rc.readBroadcast(HELP_CHANNEL);
+        int active = rc.readBroadcast(HELP_CHANNEL +1);
+
+        if (active>0 && rc.getRoundNum() - round < 50)
+        {
+            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+                boolean found = false;
+                for (RobotInfo robot: robots)
+                {
+                    if (robot.team == enemyTeam)
+                        found=true;
+                }
+                if (!found) {
+                    cancelBroadcast(HELP_CHANNEL);
+                    return false;
+                }
+            }
+            rallyPoint = readBroadCastLocation(HELP_CHANNEL +4);
+            return true;
+        }
+        else
+        {
+            cancelBroadcast(HELP_CHANNEL);
+            return false;
+        }
+    }
+
+    boolean checkReports() throws GameActionException
+    {
+        int round = rc.readBroadcast(REPORT_CHANNEL);
+        int active = rc.readBroadcast(REPORT_CHANNEL +1);
+        if (rc.getRoundNum() - round < 120 && active > 0)
+        {
+            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+                boolean found = false;
+                for (RobotInfo robot: robots)
+                {
+                    if (robot.team == enemyTeam)
+                        found=true;
+                }
+                if (!found) {
+                    cancelBroadcast(REPORT_CHANNEL);
+                    return false;
+                }
+            }
+            rallyPoint = readBroadCastLocation(REPORT_CHANNEL +3);
+            return true;
+        }
+        else
+        {
+            cancelBroadcast(REPORT_CHANNEL);
+            return false;
+        }
+    }
+
+    void cancelBroadcast(int offset) throws GameActionException {
+        rc.broadcast(offset, rc.getRoundNum());
+        rc.broadcast(offset+1, 0);
+        rallyPoint = null;
     }
 
     /**
@@ -218,26 +318,9 @@ abstract class AbstractRobot {
     }
 
     boolean moveTo(MapLocation dest) throws GameActionException {
-       /* if (blocked)
-            return wallMove(dest);
-        else
-        {
-            boolean moved =tryMove(dest);
-            if (!moved)
-                setBlocked(dest);
-            return moved;
-        }*/
-
-
 
        return tryMove(dest);
     }
-
-    /*void setBlocked(MapLocation target) {
-        blocked = true;
-        left = (rc.getLocation().directionTo(target).radiansBetween(rc.getLocation().directionTo(target)) > 0);
-    }*/
-
 
 
     abstract void readBroadcast() throws GameActionException;

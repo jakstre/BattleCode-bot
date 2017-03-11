@@ -15,20 +15,17 @@ public class Soldier extends  AbstractRobot
     @Override
     void run() throws GameActionException
     {
-        MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
-        rallyPoint = archons[0];
+
         // The code you want your robot to perform every round should be in this loop
         while (true) {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
                 //checkWin();
                 preloop();
-
                 boolean fought = fight();
                 if (!fought)
                 {
                     //checkShake();
-
                     if (rallyPoint != null)
                     {
                         moveTo(rallyPoint);
@@ -36,7 +33,6 @@ public class Soldier extends  AbstractRobot
                     else
                         randomWalk();
                 }
-
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
                 postloop();
 
@@ -47,8 +43,10 @@ public class Soldier extends  AbstractRobot
     }
 
     @Override
-    void readBroadcast() throws GameActionException {
-
+    void readBroadcast() throws GameActionException
+    {
+        if (!checkHelpCalls())
+            checkReports();
     }
 
     /*
@@ -67,11 +65,14 @@ public class Soldier extends  AbstractRobot
         float safeDistance=lumberjackRange();
 
         RobotInfo target = null;
+        float enemyPower = 0f;
+        float allyPower = 0f;
 
         for (RobotInfo r:robots)
         {
             if (r.getTeam() == enemy)
             {
+                enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
                     nearestGardener = r;
                 else if (nearestArchon == null && r.getType() == RobotType.ARCHON)
@@ -83,11 +84,18 @@ public class Soldier extends  AbstractRobot
                 if (nearestEnemy == null)
                     nearestEnemy = r;
             }
+            else
+                allyPower+=Utils.unitStrength(r.type);
         }
 
         if (nearestEnemy == null)
         { //There are no enemies in sight but we might be being shot at
             return false;
+        }
+
+        if (allyPower<=enemyPower)
+        {
+            callHelp(nearestEnemy.location,allyPower,enemyPower);
         }
 
         MapLocation combatPosition = null;

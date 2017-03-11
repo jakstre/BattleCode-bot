@@ -40,7 +40,8 @@ class Archon extends AbstractRobot {
             try {
                 preloop();
 
-                if (RobotPlayer.DEBUG) {
+                //if (RobotPlayer.DEBUG) {
+                if (false){
                     for (int i = 0; i < NUM_ANGLES; i++) {
                         float angle = (float) (2f * Math.PI / NUM_ANGLES * i);
                         int intensity = (int) (countDensity(angle) * 255);
