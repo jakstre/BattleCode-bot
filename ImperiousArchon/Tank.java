@@ -83,11 +83,14 @@ public class Tank extends  AbstractRobot
         float safeDistance=lumberjackRange();
 
         RobotInfo target = null;
+        float enemyPower = 0f;
+        float allyPower = 0f;
 
         for (RobotInfo r:robots)
         {
             if (r.getTeam() == enemy)
             {
+                enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
                     nearestGardener = r;
                 else if (nearestArchon == null && r.getType() == RobotType.ARCHON)
@@ -99,11 +102,19 @@ public class Tank extends  AbstractRobot
                 if (nearestEnemy == null)
                     nearestEnemy = r;
             }
+            else
+                allyPower+=Utils.unitStrength(r.type);
         }
 
         if (nearestEnemy == null)
         { //There are no enemies in sight but we might be being shot at
             return false;
+        }
+
+
+        if (allyPower<=enemyPower)
+        {
+            // loosing fight, call for help
         }
 
         MapLocation combatPosition = null;

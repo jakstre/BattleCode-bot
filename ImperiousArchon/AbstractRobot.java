@@ -24,6 +24,12 @@ abstract class AbstractRobot {
     BulletInfo[] bullets; //Cached result from senseNearbyBullets
     MapLocation rallyPoint = null;
     Team ourTeam, enemyTeam;
+    boolean avoidingObstacle = false;
+    boolean wentLeft = false;
+
+    final int REPORT_CHANNEL = 10;
+    final int HELP_CHANNEL = 20;
+
     boolean blocked = false;
     boolean left = false;
     RobotType myType;
@@ -59,6 +65,103 @@ abstract class AbstractRobot {
         }
 
         return new MapLocation(x / locations.length, y / locations.length);
+    }
+
+    void broadCastLocation(MapLocation loc, int offset) throws GameActionException
+    {
+        rc.broadcastFloat(offset,loc.x);
+        rc.broadcastFloat(offset+1,loc.y);
+    }
+
+    MapLocation readBroadCastLocation(int offset) throws  GameActionException
+    {
+        float x = rc.readBroadcastFloat(offset);
+        float y = rc.readBroadcastFloat(offset+1);
+        return new MapLocation(x,y);
+    }
+
+    void callHelp(MapLocation loc, float allyPower, float enemyPower) throws GameActionException {
+        int round = rc.readBroadcast(HELP_CHANNEL);
+        if (round == rc.getRoundNum())
+            //Someone else called for help this turn
+        {
+            float otherAllyPower = rc.readBroadcastFloat(HELP_CHANNEL +2);
+            float otherEnemyPower = rc.readBroadcastFloat(HELP_CHANNEL +3);
+            if (otherAllyPower/1.7 > allyPower)
+                //we are minor, dont call for help
+                return;
+            else  if (otherAllyPower>allyPower/2 && otherAllyPower/otherEnemyPower>0.65 && allyPower/enemyPower < 0.35)
+                //they are considerable and we are loosing hard, dont call for help
+                return;
+        }
+
+        rc.broadcast(HELP_CHANNEL, rc.getRoundNum());
+        rc.broadcast(HELP_CHANNEL +1,1);
+        rc.broadcastFloat(HELP_CHANNEL +2, allyPower);
+        rc.broadcastFloat(HELP_CHANNEL +3, enemyPower);
+        broadCastLocation(loc, HELP_CHANNEL +4);
+    }
+
+    boolean checkHelpCalls() throws GameActionException {
+        int round = rc.readBroadcast(HELP_CHANNEL);
+        int active = rc.readBroadcast(HELP_CHANNEL +1);
+
+        if (active>0 && rc.getRoundNum() - round < 50)
+        {
+            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+                boolean found = false;
+                for (RobotInfo robot: robots)
+                {
+                    if (robot.team == enemyTeam)
+                        found=true;
+                }
+                if (!found) {
+                    cancelBroadcast(HELP_CHANNEL);
+                    return false;
+                }
+            }
+            rallyPoint = readBroadCastLocation(HELP_CHANNEL +4);
+            return true;
+        }
+        else
+        {
+            cancelBroadcast(HELP_CHANNEL);
+            return false;
+        }
+    }
+
+    boolean checkReports() throws GameActionException
+    {
+        int round = rc.readBroadcast(REPORT_CHANNEL);
+        int active = rc.readBroadcast(REPORT_CHANNEL +1);
+        if (rc.getRoundNum() - round < 120 && active > 0)
+        {
+            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+                boolean found = false;
+                for (RobotInfo robot: robots)
+                {
+                    if (robot.team == enemyTeam)
+                        found=true;
+                }
+                if (!found) {
+                    cancelBroadcast(REPORT_CHANNEL);
+                    return false;
+                }
+            }
+            rallyPoint = readBroadCastLocation(REPORT_CHANNEL +3);
+            return true;
+        }
+        else
+        {
+            cancelBroadcast(REPORT_CHANNEL);
+            return false;
+        }
+    }
+
+    void cancelBroadcast(int offset) throws GameActionException {
+        rc.broadcast(offset, rc.getRoundNum());
+        rc.broadcast(offset+1, 0);
+        rallyPoint = null;
     }
 
     /**
@@ -223,121 +326,8 @@ abstract class AbstractRobot {
     }
 
     boolean moveTo(MapLocation dest) throws GameActionException {
-        if (blocked)
-            return wallMove(dest);
-        else
-        {
-            boolean moved =tryMove(dest);
-            if (!moved)
-                setBlocked(dest);
-            return moved;
-        }
-    }
 
-    void setBlocked(MapLocation target) {
-        blocked = true;
-        left = (rc.getLocation().directionTo(target).radiansBetween(rc.getLocation().directionTo(target)) > 0);
-    }
-
-    boolean wallMove(MapLocation dest) throws GameActionException {
-        //Find nearest object blocking on the side we are following - a tree, robot or edge of map
-        MapLocation blocker = null;
-        float distance = 0;
-        TreeInfo wallTree = null; // This is the "wall" we are following
-        float treeDist = 20;
-        RobotInfo wallRobot = null;
-        float robotDist = 20;
-        float bestAngle = 10;
-        Direction dir =rc.getLocation().directionTo(dest);
-
-        for (TreeInfo t:trees) {
-            distance = rc.getLocation().distanceTo(t.getLocation()) - t.getRadius();
-            if (distance > treeDist)
-                break;
-            float angle = dir.radiansBetween(rc.getLocation().directionTo(t.getLocation()));
-            if ((left && angle >= 0) || (!left && angle <= 0)) {
-                if (distance < treeDist || Math.abs(angle) < bestAngle) {
-                    treeDist = distance;
-                    wallTree = t;
-                    bestAngle = Math.abs(angle);
-                }
-            }
-        }
-
-        for (RobotInfo r:robots) {
-            distance = rc.getLocation().distanceTo(r.getLocation()) - r.getType().bodyRadius;
-            if (distance > robotDist)
-                break;
-            float angle = dir.radiansBetween(rc.getLocation().directionTo(r.getLocation()));
-            if ((left && angle >= 0) || (!left && angle <= 0)) {
-                robotDist = distance;
-                wallRobot = r;
-            }
-        }
-
-        if (wallTree != null && wallRobot != null) {
-            //Work out which is nearest
-            if (treeDist < robotDist) { //Tree is nearer
-                blocker = wallTree.getLocation();
-                distance = treeDist;
-                //setIndicator(rc.getLocation(), wallTree.getLocation(), 0, 0, 0);
-            } else {
-                blocker = wallRobot.getLocation();
-                distance = robotDist;
-                //setIndicator(rc.getLocation(), wallRobot.getLocation(), 0, 0, 0);
-            }
-        } else if (wallTree != null) {
-            blocker = wallTree.getLocation();
-            distance = treeDist;
-            //setIndicator(rc.getLocation(), wallTree.getLocation(), 0, 0, 0);
-        } else if (wallRobot != null) {
-            blocker = wallRobot.getLocation();
-            distance = robotDist;
-            //setIndicator(rc.getLocation(), wallRobot.getLocation(), 0, 0, 0);
-        }
-
-        //Check to see if the edge of the map is nearer
-        Direction north = Direction.NORTH;
-        int count = 0;
-        float testDistance = distance;
-        if (testDistance > rc.getType().sensorRadius - rc.getType().bodyRadius - GameConstants.BULLET_SPAWN_OFFSET)
-            testDistance = rc.getType().sensorRadius - rc.getType().bodyRadius - GameConstants.BULLET_SPAWN_OFFSET;
-        while (count < 4) {
-            MapLocation edge = rc.getLocation().add(north, testDistance);
-            if (!rc.onTheMap(edge, rc.getType().bodyRadius)) {
-                float angle = dir.radiansBetween(dir);
-                if ((left && angle >= 0) || (!left && angle <= 0)) {
-                    blocker = edge;
-                    break;
-                }
-            }
-            dir = dir.rotateLeftDegrees(90);
-            count++;
-        }
-
-        if (blocker != null) {
-            if (left)
-                dir = rc.getLocation().directionTo(blocker).rotateRightDegrees(90);
-            else
-                dir = rc.getLocation().directionTo(blocker).rotateLeftDegrees(90);
-        }
-
-        float diff = Math.abs(dir.radiansBetween(rc.getLocation().directionTo(dest)));
-        //setIndicator(rc.getLocation(), rc.getLocation().add(wanderDir, 3), 128, 128, 128);
-
-        if (diff > Math.PI/8) {
-            if (left) { //Keep the wall on our left
-                MapLocation towards = rc.getLocation().add(dir.rotateLeftDegrees(40), rc.getType().strideRadius);
-                return tryMove(towards, 20, 0, 14);
-            } else {
-                MapLocation towards = rc.getLocation().add(dir.rotateRightDegrees(40), rc.getType().strideRadius);
-                return tryMove(towards, 20, 14, 0);
-            }
-        } else {
-            //We can head towards real destination safely
-            blocked = false;
-            return tryMove(dest);
-        }
+       return tryMove(dest);
     }
 
     abstract void readBroadcast() throws GameActionException;
@@ -354,7 +344,7 @@ abstract class AbstractRobot {
 
     boolean tryMove(MapLocation to) throws GameActionException {
         indicateLine(currentLocation, to, 16, 128, 16);
-        return tryMove(to, 22, 5, 5);
+        return tryMove(to, 25, 6, 6);
     }
 
     boolean tryMove(MapLocation to, float degreeOffset, int checksLeft, int checksRight) throws GameActionException {
@@ -363,6 +353,7 @@ abstract class AbstractRobot {
 
         MapLocation here = rc.getLocation();
         Direction dir = here.directionTo(to);
+
         float dist = here.distanceTo(to);
         MapLocation dest = to;
 
@@ -388,10 +379,11 @@ abstract class AbstractRobot {
                 leastDamage = damage;
                 bestUnsafe = dest;
             }
-            if (damage == 0)
+            if (damage < 0)
             {
                 rc.move(dest);
-                //setIndicator(here, dest, 0, 255, 0);
+                avoidingObstacle = false;
+               // indicate(dest,0,0,255);
                 return true;
             }
         }
@@ -400,7 +392,53 @@ abstract class AbstractRobot {
         int currentCheck = 1;
         int checksPerSide = Math.max(checksLeft, checksRight);
 
+        if (avoidingObstacle && wentLeft)
+        {
+            // Try the offset of the left side
+            while (currentCheck <= checksLeft) {
+                dest = here.add(dir.rotateLeftDegrees(degreeOffset * currentCheck), dist);
+                if (rc.canMove(dest)) {
+                    damage = damageAtLocation(dest);
+                    if (damage > 0 && damage < leastDamage) {
+                        leastDamage = damage;
+                        bestUnsafe = dest;
+                    }
+                    if (damage < 0) {
+                        rc.move(dest);
+                        avoidingObstacle = true;
+                        //indicate(dest, 0, 0, 255);
+                        return true;
+                    }
+                }
+                currentCheck++;
+            }
+        }
+        else if (avoidingObstacle)
+        {
+            while (currentCheck <= checksRight)
+            {
+                dest = here.add(dir.rotateRightDegrees(degreeOffset*currentCheck), dist);
+                if (rc.canMove(dest))
+                {
+                    damage = damageAtLocation(dest);
+                    if (damage > 0 && damage < leastDamage)
+                    {
+                        leastDamage = damage;
+                        bestUnsafe = dest;
+                    }
+                    if (damage < 0)
+                    {
+                        rc.move(dest);
+                        avoidingObstacle = true;
+                        //indicate(dest,0,0,255);
+                        return true;
+                    }
+                }
+                currentCheck++;
+            }
+        }
 
+        currentCheck = 1;
         while(currentCheck<=checksPerSide)
         {
             // Try the offset of the left side
@@ -415,10 +453,13 @@ abstract class AbstractRobot {
                         leastDamage = damage;
                         bestUnsafe = dest;
                     }
-                    if (damage == 0)
+                    if (damage < 0)
                     {
                         rc.move(dest);
-                        //setIndicator(here, dest, 0, 255, 0);
+
+                        avoidingObstacle = true;
+                        wentLeft = true;
+                        //indicate(dest,0,0,255);
                         return true;
                     }
                 }
@@ -436,10 +477,12 @@ abstract class AbstractRobot {
                         leastDamage = damage;
                         bestUnsafe = dest;
                     }
-                    if (damage == 0)
+                    if (damage < 0)
                     {
                         rc.move(dest);
-                        //setIndicator(here, dest, 0, 255, 0);
+                        avoidingObstacle = true;
+                        wentLeft = false;
+                        //indicate(dest,0,0,255);
                         return true;
                     }
                 }
@@ -448,7 +491,8 @@ abstract class AbstractRobot {
             currentCheck++;
         }
 
-        if (bestUnsafe != null && leastDamage <= damageAtLocation(here) && rc.canMove(bestUnsafe)) { //Not safe here so happy to move to another unsafe place
+        if (bestUnsafe != null && leastDamage <= damageAtLocation(here) && rc.canMove(bestUnsafe))
+        { //Not safe here so happy to move to another unsafe place
             rc.move(bestUnsafe);
             //setIndicator(here, bestUnsafe, 255, 0, 0);
             return true;
@@ -710,7 +754,7 @@ abstract class AbstractRobot {
     */
     float damageAtLocation(MapLocation loc) throws GameActionException
     {
-        float damage = 0;
+        float damage = -0.01f;
 
         int lumberjacks = lumberjacksInRange(loc);
         if (lumberjacks > 0)

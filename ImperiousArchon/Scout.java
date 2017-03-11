@@ -69,6 +69,25 @@ public class Scout extends AbstractRobot {
 
     }
 
+    void reportEnemy(MapLocation loc, float power) throws GameActionException
+    {
+        int round = rc.readBroadcast(REPORT_CHANNEL);
+        int active = rc.readBroadcast(REPORT_CHANNEL +1);
+
+        if (rc.getRoundNum()-round <30 && active>0)
+        {
+            float otherEnemyPower = rc.readBroadcastFloat(REPORT_CHANNEL +2);
+            //TODO maybe change the condition
+            if (otherEnemyPower< power)
+                //other scout found easier target
+                return;
+        }
+
+        rc.broadcast(REPORT_CHANNEL, rc.getRoundNum());
+        rc.broadcast(REPORT_CHANNEL +1,1);
+        rc.broadcastFloat(REPORT_CHANNEL +2, power);
+        broadCastLocation(loc, REPORT_CHANNEL +3);
+    }
 
     /*
     * A tree is safe if we can hide in it
@@ -157,6 +176,7 @@ public class Scout extends AbstractRobot {
             indicate(rc.getLocation(),255,255,255);
             return false;
         }
+        reportEnemy(nearestEnemy.location,enemyPower);
 
         //dodge
         if (damageAtLocation(rc.getLocation()) > 0)
@@ -196,10 +216,8 @@ public class Scout extends AbstractRobot {
 
                 float bulletOffset = GameConstants.BULLET_SPAWN_OFFSET / 2;
                 float dist = nearestTree.radius - RobotType.SCOUT.bodyRadius - bulletOffset;
-                //if (dist >= 0)
-                    combatPosition = nearestTree.getLocation().add(nearestTree.getLocation().directionTo(dangerLoc), dist);
-                //else
-                //    combatPosition = nearestTree.getLocation().add(nearestTree.getLocation().directionTo(dangerLoc).opposite(), -dist);
+
+                combatPosition = nearestTree.getLocation().add(nearestTree.getLocation().directionTo(dangerLoc), dist);
 
                 //combatPosition = nearestTree.getLocation();
                 if (nearestGardener != null)
