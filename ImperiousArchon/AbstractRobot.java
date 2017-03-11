@@ -11,6 +11,8 @@ abstract class AbstractRobot {
     MapLocation currentLocation;
     MapLocation lastLocation;
     float currentSpeed;
+    Direction currentDirection;
+    int currentRound;
     float defenceDist;
     MapLocation[] ourInitialArchonLocations;
     MapLocation[] enemyInitialArchonLocations;
@@ -24,11 +26,13 @@ abstract class AbstractRobot {
     Team ourTeam, enemyTeam;
     boolean blocked = false;
     boolean left = false;
+    RobotType myType;
 
 
     AbstractRobot(RobotController rc) {
         this.rc = rc;
 
+        myType = rc.getType();
         ourTeam = rc.getTeam();
         enemyTeam = ourTeam.opponent();
         startLocation = rc.getLocation();
@@ -44,7 +48,7 @@ abstract class AbstractRobot {
             enemyCentroidDirection = _enemyCentroidDirection.radians;
         }
 //        defenceDist = Math.max(40, ourArchonsCentroid.distanceTo(enemyArchonsCentroid) * 0.3f);
-        defenceDist = Math.max(30, getFarthestEnemyArchonDistance() * 0.3f);
+        defenceDist = Math.max(20, getFarthestEnemyArchonDistance() * 0.3f);
     }
 
     private MapLocation countCentroid(MapLocation[] locations) {
@@ -142,7 +146,7 @@ abstract class AbstractRobot {
         return dist;
     }
 
-    void indicate(MapLocation loc, int R,int G, int B) {
+    void indicate(MapLocation loc, int R, int G, int B) {
         if (RobotPlayer.DEBUG) {
             rc.setIndicatorDot(loc, R, G, B);
         }
@@ -161,8 +165,10 @@ abstract class AbstractRobot {
         trees = rc.senseNearbyTrees();
         bullets = rc.senseNearbyBullets();
         currentLocation = rc.getLocation();
+        currentRound = rc.getRoundNum();
         if (lastLocation != null) {
-            currentSpeed = currentLocation.distanceSquaredTo(lastLocation);
+            currentSpeed = lastLocation.distanceSquaredTo(currentLocation);
+            currentDirection = lastLocation.directionTo(currentLocation);
         }
     }
 
@@ -773,6 +779,10 @@ abstract class AbstractRobot {
 
     Direction buildingDirection(RobotType type, int maxAttempts, float angularOffset)
     {
+        if (angularOffset == 0) {
+            angularOffset = (float) (2 * Math.PI / maxAttempts);
+        }
+
         Direction enemyCentroidDirection = ourArchonsCentroid.directionTo(enemyArchonsCentroid);
         for (int i =0; i <maxAttempts; i++) {
             Direction buildDir = enemyCentroidDirection.rotateLeftDegrees(angularOffset*i);

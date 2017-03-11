@@ -1,10 +1,12 @@
 package ImperiousArchon;
 
-import battlecode.common.Direction;
-import battlecode.common.GameActionException;
-import battlecode.common.RobotController;
+import battlecode.common.*;
+
+import java.util.Arrays;
+import java.util.List;
 
 import static ImperiousArchon.Utils.DIRECTION_CHANNEL;
+import static ImperiousArchon.Utils.randomAvailableDirection;
 
 /**
  * Class providing implementation of AI for Archons.
@@ -16,6 +18,9 @@ class Archon extends AbstractRobot {
 
     private int numGardeners;
     private float[] cumSum;
+
+    static List<RobotType> priorityBuildQueue = Arrays.asList(RobotType.SCOUT);
+
 
     /**
      * Creates a new Archon robot.
@@ -55,17 +60,41 @@ class Archon extends AbstractRobot {
                 }
 
                 /* Move away from enemy */
-                Direction walkDir = new Direction((float) (enemyCentroidDirection + Math.PI));
-                if (rc.canMove(walkDir)) {
+//                Direction walkDir = new Direction((float) (enemyCentroidDirection + Math.PI));
+//                if (rc.canMove(walkDir)) {
+//                    rc.move(walkDir);
+//                }
+                //TODO: pokud není místo, uhnout do rohu
+                Direction walkDir = randomAvailableDirection(rc, 16);
+                if (currentDirection != null) {
+                    final float momentum = 0.7f;
+                    MapLocation force = new MapLocation(0, 0);
+                    force = force.add(walkDir, 1);
+                    force = force.add(currentDirection, momentum);
+                    walkDir = new MapLocation(0, 0).directionTo(force);
+                }
+                if (walkDir != null && rc.canMove(walkDir)) {
                     rc.move(walkDir);
                 }
 
                 /* Randomly attempt to build a gardener in available direction */
                 Direction dir = new Direction(randomDir());
-                if (numGardeners < MAX_GARDENERS && rc.canHireGardener(dir) && Math.random() < .05) {
+                if (!rc.canBuildRobot(RobotType.GARDENER, dir)) {
+                    dir = buildingDirection(RobotType.GARDENER, 32, 0);
+                }
+                final int numBuildFromQueue = rc.readBroadcastInt(Utils.BUILD_CHANNEL);
+                if (dir != null
+                        && ((rc.canHireGardener(dir) && numGardeners <= 0)
+                            || (numGardeners < MAX_GARDENERS
+                                && rc.canHireGardener(dir)
+                                && Math.random() < .05
+                                && numBuildFromQueue >= priorityBuildQueue.size()))) {
                     rc.hireGardener(dir);
                     rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
                     ++numGardeners;
+                }
+                if (dir == null) {
+                    //TODO: najdi cestu do volného prostoru!
                 }
 
                 postloop();

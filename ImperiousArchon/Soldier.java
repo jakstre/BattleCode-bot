@@ -2,6 +2,10 @@ package ImperiousArchon;
 
 import battlecode.common.*;
 
+import static ImperiousArchon.Utils.ZERO_LOCATION;
+import static ImperiousArchon.Utils.randomAvailableDirection;
+import static ImperiousArchon.Utils.randomDirection;
+
 /**
  * Created by jakub on 05.03.2017.
  */
@@ -15,31 +19,21 @@ public class Soldier extends  AbstractRobot
     @Override
     void run() throws GameActionException
     {
-        MapLocation[] archons = rc.getInitialArchonLocations(rc.getTeam().opponent());
-        rallyPoint = archons[0];
+        rallyPoint = enemyArchonsCentroid;
         // The code you want your robot to perform every round should be in this loop
         while (true) {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
-                //checkWin();
                 preloop();
 
                 boolean fought = fight();
                 if (!fought)
                 {
                     checkShake();
-
-                    if (rallyPoint != null)
-                    {
-                        moveTo(rallyPoint);
-                    }
-                    else
-                        randomWalk();
                 }
+                move();
 
-                // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
                 postloop();
-
             } catch (Exception e) {
                 e.printStackTrace();
             }
@@ -48,7 +42,63 @@ public class Soldier extends  AbstractRobot
 
     @Override
     void readBroadcast() throws GameActionException {
+        /* ignoring... */
+    }
 
+    private int lastDirectionChange;
+
+    private void move() throws GameActionException {
+        MapLocation force = new MapLocation(0, 0);
+
+        final int myMass = 16;
+        final int targetMass = 512;
+        final int wanderForce = 128;
+        final float obstacleMass = 1;
+
+        if (rallyPoint != null) {
+            /* Add main force towards the destination */
+            force = force.add(currentLocation.directionTo(rallyPoint), targetMass);
+
+            /* Rally point reached, try to do other things */
+            if (currentLocation.distanceTo(rallyPoint) < 10) {
+                rallyPoint = null;
+            }
+        } else {
+            if (currentRound - lastDirectionChange > 1
+                    && (currentDirection == null || !rc.canMove(currentDirection) || currentSpeed < 0.1)) {
+                Direction randDir = randomAvailableDirection(rc, 16);
+                if (randDir == null) {
+                    randDir = randomDirection();
+                }
+                force = force.add(randDir, wanderForce);
+                lastDirectionChange = currentRound;
+            } else {
+                force = force.add(currentDirection, wanderForce);
+            }
+        }
+
+        /* Add pushing forces */
+        for (RobotInfo robot : robots) {
+            if (robot.team == ourTeam) {
+                if (robot.type == RobotType.SOLDIER) {
+                    /* Force towards other soldiers */
+                    final MapLocation objectLocation = robot.location;
+                    final float distToObject = currentLocation.distanceSquaredTo(objectLocation);
+                    force = force.add(
+                            currentLocation.directionTo(objectLocation).radians,
+                            myMass * myMass / distToObject);
+                } else if (robot.type == RobotType.GARDENER) {
+                    /* Force away from gardeners */
+                    final MapLocation objectLocation = robot.location;
+                    final float distToObject = currentLocation.distanceSquaredTo(objectLocation);
+                    force = force.subtract(
+                            currentLocation.directionTo(objectLocation).radians,
+                            myMass * myMass / distToObject);
+                }
+            }
+        }
+
+        tryMove(currentLocation.add(ZERO_LOCATION.directionTo(force), ZERO_LOCATION.distanceTo(force)));
     }
 
     /*

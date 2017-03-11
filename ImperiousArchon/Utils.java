@@ -7,8 +7,12 @@ import battlecode.common.*;
  */
 class Utils {
 
-    public static final int BUILD_CHANNEL = 0;
-    public static final int DIRECTION_CHANNEL = 1;
+    static final int BUILD_CHANNEL = 0;
+    static final int DIRECTION_CHANNEL = 1;
+
+    static final MapLocation ZERO_LOCATION = new MapLocation(0, 0);
+
+
     static float unitStrength(RobotType type)
     {
         if (type.bulletSpeed > 0)

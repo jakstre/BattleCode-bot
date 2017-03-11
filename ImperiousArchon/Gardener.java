@@ -3,11 +3,10 @@ package ImperiousArchon;
 import battlecode.common.*;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
-import static ImperiousArchon.Utils.BUILD_CHANNEL;
-import static ImperiousArchon.Utils.randomAvailableDirection;
+import static ImperiousArchon.Archon.priorityBuildQueue;
+import static ImperiousArchon.Utils.*;
 
 /**
  * Class providing implementation of AI for Gardeners.
@@ -17,10 +16,8 @@ class Gardener extends AbstractRobot {
     private static final int MAX_TREES = 5;
     private static final float MIN_TREE_HEALTH_DIFF = 5;
 
-    private static final MapLocation ZERO_LOCATION = new MapLocation(0, 0);
-
     enum GardenerState {
-        POSITIONING, PLANTING, GARDENING, MOTHER, LUMBERCAMPING
+        POSITIONING, MOTHER, LUMBERCAMPING
     }
 
     enum TreeStrategy {
@@ -28,14 +25,13 @@ class Gardener extends AbstractRobot {
     }
 
     private Direction lastTreeDirection;
-    private int wantedTrees = MAX_TREES;
+    private int wantedTrees = MAX_TREES - 1;
     private int numBuild[] = new int[RobotPlayer.orderedTypes.length];
     private int[] wantedRobots = {10, 3, 2, 2};
     private float[] buildProbs = {0.04f, 0.02f, 0.01f, 0f};
     private GardenerState state = GardenerState.POSITIONING;
     private Float myDirection;
     private List<TreeInfo> myTrees = new ArrayList<>();
-    private static List<RobotType> toBuild = Arrays.asList(RobotType.SCOUT, RobotType.SOLDIER);
 
 
     /**
@@ -67,20 +63,22 @@ class Gardener extends AbstractRobot {
                 /* Check if some units have to be build */
                 checkPriorityBuilds();
 
+                /* Water trees if you can */
+                tryWater();
+
                 switch (state) {
                     case POSITIONING:
                         takePosition();
                         break;
-                    case PLANTING:
-                        plant();
-                        break;
-                    case GARDENING:
-                        tryWater();
-                        tryBuild();
-                        break;
+//                    case PLANTING:
+//                        plant();
+//                        break;
+//                    case GARDENING:
+//                        tryWater();
+//                        tryBuild();
+//                        break;
                     case MOTHER:
-                        wantedTrees = 3;
-                        tryWater();
+//                        wantedTrees = 3;
                         tryBuild();
                         break;
                     case LUMBERCAMPING:
@@ -99,17 +97,17 @@ class Gardener extends AbstractRobot {
     void readBroadcast() throws GameActionException {
         //TODO: hezčí dekódování / předávání zpráv vůbec
         if (myDirection == null) {
-            myDirection = rc.readBroadcastFloat(0);
-            startMovingRound = rc.getRoundNum();
+            myDirection = rc.readBroadcastFloat(DIRECTION_CHANNEL);
+            startMovingRound = currentRound;
         }
     }
 
     private void checkPriorityBuilds() throws GameActionException {
         int buildIndex = rc.readBroadcastInt(BUILD_CHANNEL);
-        if (buildIndex < toBuild.size()) {
-            Direction dir = buildingDirection(toBuild.get(buildIndex), 10, 25);
+        if (buildIndex < priorityBuildQueue.size()) {
+            Direction dir = buildingDirection(priorityBuildQueue.get(buildIndex), 10, 25);
             if (dir != null) {
-                rc.buildRobot(toBuild.get(buildIndex), dir);
+                rc.buildRobot(priorityBuildQueue.get(buildIndex), dir);
                 rc.broadcast(BUILD_CHANNEL, buildIndex + 1);
             }
         }
@@ -180,10 +178,10 @@ class Gardener extends AbstractRobot {
     }
 
     private void plant() throws GameActionException {
-        /* Let's not forget about our trees */
-        if (myTrees.size() > 0) {
-            tryWater();
-        }
+//        /* Let's not forget about our trees */
+//        if (myTrees.size() > 0) {
+//            tryWater();
+//        }
 
         /* This gardener has enough trees to carry about already */
         if (myTrees.size() >= wantedTrees) {
@@ -229,7 +227,7 @@ class Gardener extends AbstractRobot {
     private int startMovingRound;
 
     private void takePosition() throws GameActionException {
-        if (lastLocation != null && rc.getRoundNum() - startMovingRound > 1 && currentSpeed < 0.2) {
+        if (lastLocation != null && currentRound - startMovingRound > 1 && currentSpeed < 0.2) {
             if (numNotOurTreesVisible() > 3) {
                 state = GardenerState.LUMBERCAMPING;
                 return;
@@ -240,14 +238,42 @@ class Gardener extends AbstractRobot {
         newtonPath();
 
         /* Probability to change state increases with distance and with time */
-        if (0.3 * getClosestOurArchonDistance() / defenceDist
-                > Math.random() + 0.12 * Math.max(0, 1 - (rc.getRoundNum() - startMovingRound) / (42 + toBuild.size() * 15))) {
-            if (Math.random() < 0.8) {
-                state = GardenerState.MOTHER;
-            } else {
-                state = GardenerState.PLANTING;
+        if (canSettle()) {
+            state = GardenerState.MOTHER;
+        } else if (currentRound - startMovingRound > 10) {
+            if (numNotOurTreesVisible() > 3) {
+                state = GardenerState.LUMBERCAMPING;
             }
         }
+    }
+
+    private boolean canSettle() {
+        /* Count distance to archon */
+        final float dist = getClosestOurArchonDistance() / defenceDist;
+        if (dist < 1 && dist < Math.min(1, 0.2 + (currentRound - startMovingRound) / 100)) {
+            return false;
+        }
+
+        /* Don't build to close to other gardeners */
+        RobotInfo nearestGardener = findNearestRobot(robots, RobotType.GARDENER, ourTeam);
+        if (nearestGardener != null && currentLocation.distanceTo(nearestGardener.location) < 15) {
+            return false;
+        }
+
+        /* Count available positions */
+        int freePositions = 0;
+        Direction dir = randomAvailableDirection(rc, 32);
+        if (dir == null) {
+            dir = randomDirection();
+        }
+        for (int i = 0; i < MAX_TREES; i++) {
+            if (rc.canPlantTree(dir)) {
+                ++freePositions;
+            }
+            dir = dir.rotateRightRads((float) (2 * Math.PI / MAX_TREES));
+
+        }
+        return freePositions >= wantedTrees / 2;
     }
 
     private int numNotOurTreesVisible() {
@@ -264,57 +290,56 @@ class Gardener extends AbstractRobot {
         MapLocation force = new MapLocation(0, 0);
 
         final int gardenerMass = 256;
-        final int archonMass = 512;
-        final float treeMass = 8;
-        final float obstacleMass = 1;
+        final int archonMass = 1024;
+        final float treeMass = 1;
+        final float obstacleMass = 64;
 
 
-        /* Add main force towards the destination */
-//        force = force.add(myDirection, 128);
+        /* Add main force towards the destination away from our centroid */
         final float distFromArchons2 = ourArchonsCentroid.distanceSquaredTo(currentLocation);
         force = force.add(myDirection, gardenerMass * archonMass / distFromArchons2);
+        force = force.add(myDirection, archonMass);
 
-        /* Force towards enemy */
-//        force = force.add(enemyCentroidDirection, 32);
+        /* Force away from enemy centroid */
         final float distToArchons2 = enemyArchonsCentroid.distanceSquaredTo(currentLocation);
-        force = force.add(enemyCentroidDirection, gardenerMass * archonMass / distToArchons2);
+        force = force.subtract(enemyCentroidDirection, 0.5f * gardenerMass * archonMass / distToArchons2);
 
         /* Add pushing forces */
-        final int sightRange = 7;
-        final int step = 2;
-        int row;
-        for (int i = -sightRange; i < sightRange; i += step) {
-            row = 0;
-            for (int j = -sightRange; j < sightRange; j += step) {
-                if (i == 0 && j == 0) {
-                    continue;
-                }
-
-                MapLocation shift = currentLocation.translate(i + ((row % 2 == 0) ? -0 / 2f : 0f), j);
-                if (currentLocation.distanceTo(shift) < sightRange) {
-                    if (rc.canMove(shift)) {
-                        indicate(shift, 10, 10, 128);
-                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
-                        force = force.add(
-                                currentLocation.directionTo(shift).radians,
-                                (float) (Math.random() * gardenerMass * obstacleMass / distToDot2));
-                    } else {
-                        indicate(shift, 128, 10, 10);
-                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
-                        force = force.subtract(
-                                currentLocation.directionTo(shift).radians,
-                                (float) (Math.random() * gardenerMass * obstacleMass / distToDot2));
-                    }
-                }
-                ++row;
-            }
-        }
-//        for (TreeInfo tree : trees) {
-//            final float distToTree2 = currentLocation.distanceSquaredTo(tree.location);
-//            force = force.subtract(
-//                    currentLocation.directionTo(tree.location).radians,
-//                    gardenerMass * treeMass / distToTree2);
+//        final int sightRange = 7;
+//        final int step = 2;
+//        int row;
+//        for (int i = -sightRange; i < sightRange; i += step) {
+//            row = 0;
+//            for (int j = -sightRange; j < sightRange; j += step) {
+//                if (i == 0 && j == 0) {
+//                    continue;
+//                }
+//
+//                MapLocation shift = currentLocation.translate(i + ((row % 2 == 0) ? -step / 2f : 0f), j);
+//                if (currentLocation.distanceTo(shift) < sightRange/* && Math.random() < 0.3*/) {
+//                    if (rc.canMove(shift)) {
+//                        indicate(shift, 10, 10, 128);
+//                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
+//                        force = force.add(
+//                                currentLocation.directionTo(shift).radians,
+//                                gardenerMass * obstacleMass / distToDot2);
+//                    } else {
+//                        indicate(shift, 128, 10, 10);
+//                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
+//                        force = force.subtract(
+//                                currentLocation.directionTo(shift).radians,
+//                                gardenerMass * obstacleMass / distToDot2);
+//                    }
+//                }
+//                ++row;
+//            }
 //        }
+        for (TreeInfo tree : trees) {
+            final float distToTree2 = currentLocation.distanceSquaredTo(tree.location);
+            force = force.subtract(
+                    currentLocation.directionTo(tree.location).radians,
+                    gardenerMass * treeMass / distToTree2);
+        }
         for (RobotInfo robot : robots) {
             if (robot.getTeam() != ourTeam || robot.type != RobotType.GARDENER) {
                 continue;
@@ -329,6 +354,12 @@ class Gardener extends AbstractRobot {
     }
 
     private void lumbercamp() throws GameActionException {
+        /* If the place is ready, change the state */
+        if (canSettle()) {
+            advanceState();
+            return;
+        }
+
         Direction dir = randomAvailableDirection(rc, 10);
         if (dir == null) {
             return;
@@ -338,14 +369,16 @@ class Gardener extends AbstractRobot {
             rc.buildRobot(RobotType.LUMBERJACK, dir);
             ++numBuild[robotID];
         } else if (numBuild[robotID] > 1) {
-            final double uniRand = Math.random();
-            if (uniRand < 0.8) {
-                state = GardenerState.MOTHER;
-            } else if (uniRand < 0.9) {
-                state = GardenerState.PLANTING;
-            } else {
-                state = GardenerState.POSITIONING;
-            }
+            state = GardenerState.POSITIONING;
+        }
+    }
+
+    private void advanceState() {
+        final double uniRand = Math.random();
+        if (uniRand < 0.8) {
+            state = GardenerState.MOTHER;
+        } else {
+            state = GardenerState.POSITIONING;
         }
     }
 

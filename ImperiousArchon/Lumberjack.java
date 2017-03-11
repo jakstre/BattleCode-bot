@@ -2,6 +2,7 @@ package ImperiousArchon;
 
 import battlecode.common.*;
 
+import static ImperiousArchon.Utils.ZERO_LOCATION;
 import static ImperiousArchon.Utils.randomAvailableDirection;
 import static ImperiousArchon.Utils.randomDirection;
 
@@ -30,28 +31,7 @@ class Lumberjack extends AbstractRobot {
             try {
                 preloop();
 
-                //TODO: to co je nejblíže ke startu!
-                /* Find the closest tree */
-                TreeInfo closest = null;
-                float dist = Float.POSITIVE_INFINITY;
-                for (TreeInfo tree : trees) {
-                    float _dist = currentLocation.distanceTo(tree.location);
-                    if (tree.team != ourTeam && _dist < dist/* && rc.canChop(tree.getID())*/) {
-                        closest = tree;
-                        dist = _dist;
-                    }
-                }
-
-                /* Chop the closest tree */
-                if (closest != null) {
-                    if (rc.canChop(closest.getID())) {
-                        rc.chop(closest.location);
-                    } else {
-                        tryMove(closest.location);
-                    }
-                } else {
-                    tryMove(currentLocation.add(randomAvailableDirection(rc, 10)));
-                }
+                cutClosest();
 
 //                // See if there are any enemy robots within striking range (distance 1 from lumberjack's radius)
 //                RobotInfo[] robots = rc.senseNearbyRobots(RobotType.LUMBERJACK.bodyRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS, enemyTeam);
@@ -81,6 +61,72 @@ class Lumberjack extends AbstractRobot {
                 e.printStackTrace();
             }
         }
+    }
+
+    private void cutClosest() throws GameActionException {
+        TreeInfo closest = closestTree();
+
+        /* Chop the closest tree */
+        if (closest != null) {
+            if (rc.canChop(closest.getID())) {
+                rc.chop(closest.location);
+            } else {
+                tryMove(closest.location);
+            }
+        } else {
+//            tryMove(currentLocation.add(randomAvailableDirection(rc, 10)));
+            groupMove();
+        }
+    }
+
+    /**
+     * Finds the best closest chopable tree.
+     *
+     * @return The best closest chopable tree, null if does not exist.
+     */
+    private TreeInfo closestTree() {
+        TreeInfo closestToStart = null;
+        TreeInfo closestToMe = null;
+        float distToStart = Float.POSITIVE_INFINITY;
+        float distToMe = Float.POSITIVE_INFINITY;
+        for (TreeInfo tree : trees) {
+            float _distToStart = startLocation.distanceTo(tree.location);
+            float _distToMe = currentLocation.distanceTo(tree.location);
+            if (tree.team != ourTeam/* && rc.canChop(tree.getID())*/) {
+                if (_distToStart < distToStart) {
+                    closestToStart = tree;
+                    distToStart = _distToStart;
+                }
+                if (_distToMe < distToMe) {
+                    closestToMe = tree;
+                    distToMe = _distToMe;
+                }
+            }
+        }
+        return closestToStart == null ? closestToMe : closestToStart;
+    }
+
+    private void groupMove() throws GameActionException {
+        MapLocation force = new MapLocation(0, 0);
+
+        final int lumberjackMass = 256;
+        final int archonMass = 512;
+
+
+        /* Add main force towards the destination */
+//        force = force.add(myDirection, 128);
+        final float distFromArchons2 = ourArchonsCentroid.distanceSquaredTo(currentLocation);
+        force = force.add(enemyCentroidDirection, lumberjackMass * archonMass / distFromArchons2);
+
+        for (RobotInfo robot : robots) {
+            if (robot.team != ourTeam || robot.type != myType) {
+                continue;
+            }
+            force = force.add(currentLocation.directionTo(robot.location),
+                    lumberjackMass * lumberjackMass / currentLocation.distanceTo(robot.location));
+        }
+
+        tryMove(currentLocation.add(ZERO_LOCATION.directionTo(force), ZERO_LOCATION.distanceTo(force)));
     }
 
     @Override
