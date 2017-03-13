@@ -33,27 +33,28 @@ class Lumberjack extends AbstractRobot {
 
                 cutClosest();
 
-//                // See if there are any enemy robots within striking range (distance 1 from lumberjack's radius)
-//                RobotInfo[] robots = rc.senseNearbyRobots(RobotType.LUMBERJACK.bodyRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS, enemyTeam);
-//                if (robots.length > 0 && !rc.hasAttacked()) {
-//                    // Use strike() to hit all nearby robots!
-//                    rc.strike();
-//                } else {
-//                    // No close robots, so search for robots within sight radius
-//                    robots = rc.senseNearbyRobots(-1, enemyTeam);
-//
-//                    // If there is a robot, move towards it
-//                    if (robots.length > 0) {
-//                        MapLocation myLocation = rc.getLocation();
-//                        MapLocation enemyLocation = robots[0].getLocation();
-//                        Direction toEnemy = myLocation.directionTo(enemyLocation);
-//
-//                        tryMove(myLocation.add(toEnemy));
-//                    } else {
-//                        // Move Randomly
-//                        tryMove(currentLocation.add(randomDirection()));
-//                    }
-//                }
+                //TODO: originální example kód, který teď spíš nefunguje, nutno opravit
+                // See if there are any enemy robots within striking range (distance 1 from lumberjack's radius)
+                RobotInfo[] robots = rc.senseNearbyRobots(
+                        RobotType.LUMBERJACK.bodyRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS, enemyTeam);
+                if (robots.length > 0 && !rc.hasAttacked()) {
+                    // Use strike() to hit all nearby robots!
+                    rc.strike();
+                } else {
+                    // No close robots, so search for robots within sight radius
+                    robots = rc.senseNearbyRobots(-1, enemyTeam);
+
+                    // If there is a robot, move towards it
+                    if (robots.length > 0) {
+                        MapLocation enemyLocation = robots[0].getLocation();
+                        Direction toEnemy = currentLocation.directionTo(enemyLocation);
+
+                        tryMove(currentLocation.add(toEnemy));
+                    } else {
+                        // Move Randomly
+                        tryMove(currentLocation.add(randomDirection()));
+                    }
+                }
 
                 postloop();
             } catch (Exception e) {
@@ -71,7 +72,7 @@ class Lumberjack extends AbstractRobot {
             if (rc.canChop(closest.getID())) {
                 rc.chop(closest.location);
             } else {
-                tryMove(closest.location);
+//                tryMove(closest.location);
             }
         } else {
 //            tryMove(currentLocation.add(randomAvailableDirection(rc, 10)));
@@ -84,7 +85,7 @@ class Lumberjack extends AbstractRobot {
      *
      * @return The best closest chopable tree, null if does not exist.
      */
-    private TreeInfo closestTree() {
+    private TreeInfo closestTree() throws GameActionException {
         TreeInfo closestToStart = null;
         TreeInfo closestToMe = null;
         float distToStart = Float.POSITIVE_INFINITY;
@@ -102,6 +103,9 @@ class Lumberjack extends AbstractRobot {
                     distToMe = _distToMe;
                 }
             }
+        }
+        if (closestToStart != null) {
+            tryMove(closestToStart.location);
         }
         return closestToStart == null ? closestToMe : closestToStart;
     }

@@ -5,7 +5,9 @@ import battlecode.common.*;
 import java.util.Arrays;
 import java.util.List;
 
+import static ImperiousArchon.Gardener.MAX_TREES;
 import static ImperiousArchon.Utils.DIRECTION_CHANNEL;
+import static ImperiousArchon.Utils.ZERO_LOCATION;
 import static ImperiousArchon.Utils.randomAvailableDirection;
 
 /**
@@ -14,12 +16,12 @@ import static ImperiousArchon.Utils.randomAvailableDirection;
 class Archon extends AbstractRobot {
 
     private final static int NUM_ANGLES = 360 / 4;
-    private final static int MAX_GARDENERS = 7;
+    private final static int MAX_GARDENERS = 700;
 
     private int numGardeners;
     private float[] cumSum;
 
-    static List<RobotType> priorityBuildQueue = Arrays.asList(RobotType.SCOUT);
+    static List<RobotType> priorityBuildQueue = Arrays.asList(RobotType.SCOUT, RobotType.SOLDIER);
 
 
     /**
@@ -45,27 +47,27 @@ class Archon extends AbstractRobot {
             try {
                 preloop();
 
-                if (RobotPlayer.DEBUG) {   
-                    for (int i = 0; i < NUM_ANGLES; i++) {
-                        float angle = (float) (2f * Math.PI / NUM_ANGLES * i);
-                        int intensity = (int) (countDensity(angle) * 255);
-                        if (intensity == 0) {
-                            continue;
-                        }
-                        indicateLine(
-                                ourArchonsCentroid,
-                                ourArchonsCentroid.add(angle, 4),
-                                intensity, intensity, intensity);
-                    }
-                }
+//                if (RobotPlayer.DEBUG) {
+//                    for (int i = 0; i < NUM_ANGLES; i++) {
+//                        float angle = (float) (2f * Math.PI / NUM_ANGLES * i);
+//                        int intensity = (int) (countDensity(angle) * 255);
+//                        if (intensity == 0) {
+//                            continue;
+//                        }
+//                        indicateLine(
+//                                ourArchonsCentroid,
+//                                ourArchonsCentroid.add(angle, 2),
+//                                intensity, intensity, intensity);
+//                    }
+//                }
 
                 /* Move away from enemy */
 //                Direction walkDir = new Direction((float) (enemyCentroidDirection + Math.PI));
 //                if (rc.canMove(walkDir)) {
 //                    rc.move(walkDir);
 //                }
-                //TODO: pokud není místo, uhnout do rohu
                 Direction walkDir = randomAvailableDirection(rc, 16);
+//                Direction walkDir = findOpenSpaceDir();
                 if (currentDirection != null) {
                     final float momentum = 0.7f;
                     MapLocation force = new MapLocation(0, 0);
@@ -78,24 +80,29 @@ class Archon extends AbstractRobot {
                 }
 
                 /* Randomly attempt to build a gardener in available direction */
+//                Direction dir = new Direction(findOpenSpaceDir());
                 Direction dir = new Direction(randomDir());
                 if (!rc.canBuildRobot(RobotType.GARDENER, dir)) {
                     dir = buildingDirection(RobotType.GARDENER, 32, 0);
                 }
                 final int numBuildFromQueue = rc.readBroadcastInt(Utils.BUILD_CHANNEL);
                 if (dir != null
-                        && ((rc.canHireGardener(dir) && numGardeners <= 0)
-                            || (numGardeners < MAX_GARDENERS
-                                && rc.canHireGardener(dir)
-                                && Math.random() < .05
-                                && numBuildFromQueue >= priorityBuildQueue.size()))) {
+                        && ((rc.canHireGardener(dir) && (numGardeners <= 0 || numGardeners <= 4 && rc.getTeamBullets() >= 150))
+                        || (numGardeners < MAX_GARDENERS
+                        && rc.canHireGardener(dir)
+                        && Math.random() < .1
+                        && numBuildFromQueue >= priorityBuildQueue.size()))) {
                     rc.hireGardener(dir);
                     rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
+//                    rc.broadcastFloat(DIRECTION_CHANNEL, dir.radians);
                     ++numGardeners;
                 }
                 if (dir == null) {
-                    //TODO: najdi cestu do volného prostoru!
+                    //TODO: najdi cestu do volneho prostoru!
                 }
+
+                /* Call for help if being attacked */
+                checkHelpNeeds();
 
                 postloop();
             } catch (Exception e) {
@@ -105,9 +112,67 @@ class Archon extends AbstractRobot {
         }
     }
 
+    private Direction findOpenSpaceDir() {
+        /* Method using probability to find the biggest open space */
+        final int numDivisions = 16;
+        final int[] hits = new int[numDivisions];
+        for (int i = 0; i < hits.length; i++) {
+            hits[i] = 0;
+        }
+        final int hitsToTry = 32;
+        final float angleStep = (float) (2 * Math.PI / numDivisions);
+        for (int i = 0; i < numDivisions; i++) {
+            Direction angle = new Direction((float) ((Math.random() - 0.5) * angleStep + angleStep * i));
+            for (int j = 0; j < hitsToTry; j++) {
+                MapLocation loc = currentLocation.add(angle, (float) (Math.random() * myType.sensorRadius));
+                if (rc.canMove(loc)) {
+                    ++hits[i];
+//                    indicate(loc, 160, 255, 160);
+                }
+            }
+        }
+
+        MapLocation force = new MapLocation(0, 0);
+        for (int i = 0; i < numDivisions; i++) {
+            force = force.add(i * angleStep, hits[i] * hits[i]);
+        }
+        indicateLine(currentLocation, currentLocation.add(ZERO_LOCATION.directionTo(force), 10), 60, 250, 60);
+        return ZERO_LOCATION.directionTo(force);
+    }
+
+    private float findBestGardenerDirection() {
+        /* Method directly trying the positions -> precise */
+        Direction dir = new Direction(randomDir());
+        final int numDirs = 16;
+        final float offset = (float) (2 * Math.PI / numDirs);
+        for (int i = 0; i < numDirs; i++) {
+            Direction buildDir = dir.rotateLeftRads(offset * i);
+            if (rc.canHireGardener(buildDir)) {
+                MapLocation gardenerLocation = currentLocation.add(buildDir,
+                        myType.bodyRadius + myType.strideRadius + RobotType.GARDENER.bodyRadius);
+                indicate(gardenerLocation, 64, 256, 64);
+                final int _maxNum = numPlantPositions(gardenerLocation, buildDir);
+                //TODO:...
+            }
+        }
+        return 42;
+    }
+
+    private int numPlantPositions(MapLocation gardener, Direction myBuildingDirection) {
+        int availablePositions = 0;
+        for (int i = 0; i < MAX_TREES; i++) {
+            Direction plantDir = myBuildingDirection.rotateLeftRads((float) (2 * Math.PI / MAX_TREES * i));
+            if (rc.canMove(plantDir, RobotType.GARDENER.bodyRadius + RobotType.GARDENER.strideRadius
+                    + GameConstants.BULLET_TREE_RADIUS)) {
+                ++availablePositions;
+            }
+        }
+        return availablePositions;
+    }
+
     private float countDensity(float angle) {
         Direction dir = new Direction(angle);
-        if (Math.abs(dir.radiansBetween(new Direction(enemyCentroidDirection))) > Math.PI / 4) {
+        if (Math.abs(dir.radiansBetween(new Direction(enemyCentroidDirection))) > Math.PI / 3) {
             return 0;
         }
         return (float)
@@ -134,7 +199,6 @@ class Archon extends AbstractRobot {
         /* Normalize cumulative sum */
         for (int i = 0; i < NUM_ANGLES; i++) {
             cumSum[i] /= cumSum[NUM_ANGLES - 1];
-//            System.out.println("cumsum[" + i + "] = " + cumSum[i]);
         }
     }
 

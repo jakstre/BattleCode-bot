@@ -2,9 +2,6 @@ package ImperiousArchon;
 
 import battlecode.common.*;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import static ImperiousArchon.Archon.priorityBuildQueue;
 import static ImperiousArchon.Utils.*;
 
@@ -13,25 +10,29 @@ import static ImperiousArchon.Utils.*;
  */
 class Gardener extends AbstractRobot {
 
-    private static final int MAX_TREES = 5;
+    static final int MAX_TREES = 5;
     private static final float MIN_TREE_HEALTH_DIFF = 5;
+
+    private static final float DEFAULT_SOLDIER_PROBABILITY = 0.08f;
+    private static final float DEFAULT_TANK_PROBABILITY = 0.03f;
+    private static final float DEFAULT_SCOUT_PROBABILITY = 0.005f;
+    private static final float DEFAULT_LUMBERJACK_PROBABILITY = 0.0f;
+    //NOTE: this constant has a huge impact on fight result, but what is the "right" value?
+    private static final float BUILDING_GAP = 4.5f;
 
     enum GardenerState {
         POSITIONING, MOTHER, LUMBERCAMPING
     }
 
-    enum TreeStrategy {
-        COMPACT, BARRICADE
-    }
-
-    private Direction lastTreeDirection;
-    private int wantedTrees = MAX_TREES - 1;
+    private int startMovingRound;
     private int numBuild[] = new int[RobotPlayer.orderedTypes.length];
-    private int[] wantedRobots = {10, 3, 2, 2};
-    private float[] buildProbs = {0.04f, 0.02f, 0.01f, 0f};
+    private int[] wantedRobots = {1000, 300, 2, 2};
+    private float[] buildProbs = {
+            DEFAULT_SOLDIER_PROBABILITY, DEFAULT_TANK_PROBABILITY,
+            DEFAULT_SCOUT_PROBABILITY, DEFAULT_LUMBERJACK_PROBABILITY};
     private GardenerState state = GardenerState.POSITIONING;
-    private Float myDirection;
-    private List<TreeInfo> myTrees = new ArrayList<>();
+    private Float myPositionDirection;
+    private Direction myBuildingDirection;
 
 
     /**
@@ -60,31 +61,31 @@ class Gardener extends AbstractRobot {
             try {
                 preloop();
 
+                myBuildingDirection = currentLocation.directionTo(enemyArchonsCentroid);
+
                 /* Check if some units have to be build */
                 checkPriorityBuilds();
 
                 /* Water trees if you can */
                 tryWater();
 
+                /* Act based on your state */
                 switch (state) {
                     case POSITIONING:
                         takePosition();
                         break;
-//                    case PLANTING:
-//                        plant();
-//                        break;
-//                    case GARDENING:
-//                        tryWater();
-//                        tryBuild();
-//                        break;
                     case MOTHER:
-//                        wantedTrees = 3;
                         tryBuild();
+                        plant();
                         break;
                     case LUMBERCAMPING:
                         lumbercamp();
+                        takePosition();
                         break;
                 }
+
+                /* Call for help if being attacked */
+                checkHelpNeeds();
 
                 postloop();
             } catch (Exception e) {
@@ -95,27 +96,32 @@ class Gardener extends AbstractRobot {
 
     @Override
     void readBroadcast() throws GameActionException {
-        //TODO: hezčí dekódování / předávání zpráv vůbec
-        if (myDirection == null) {
-            myDirection = rc.readBroadcastFloat(DIRECTION_CHANNEL);
+        if (myPositionDirection == null) {
+            myPositionDirection = rc.readBroadcastFloat(DIRECTION_CHANNEL);
             startMovingRound = currentRound;
+        }
+        if (checkHelpCalls()) {
+            buildProbs[RobotPlayer.typeToInt.get(RobotType.SOLDIER)] = 2 * DEFAULT_SOLDIER_PROBABILITY;
+        } else {
+            buildProbs[RobotPlayer.typeToInt.get(RobotType.SOLDIER)] = DEFAULT_SOLDIER_PROBABILITY;
         }
     }
 
-    private void checkPriorityBuilds() throws GameActionException {
+    private boolean checkPriorityBuilds() throws GameActionException {
         int buildIndex = rc.readBroadcastInt(BUILD_CHANNEL);
         if (buildIndex < priorityBuildQueue.size()) {
             Direction dir = buildingDirection(priorityBuildQueue.get(buildIndex), 10, 25);
             if (dir != null) {
                 rc.buildRobot(priorityBuildQueue.get(buildIndex), dir);
-                rc.broadcast(BUILD_CHANNEL, buildIndex + 1);
+                rc.broadcastInt(BUILD_CHANNEL, ++buildIndex);
             }
         }
+        return buildIndex >= priorityBuildQueue.size();
     }
 
     private void tryBuild() throws GameActionException {
         for (RobotType orderedType : RobotPlayer.orderedTypes) {
-            Direction dir = buildingDirection(orderedType, 12,25);
+            Direction dir = buildingDirection(orderedType, 12,0);
             if (dir == null) {
                 continue;
             }
@@ -128,16 +134,6 @@ class Gardener extends AbstractRobot {
                 ++numBuild[robotID];
             }
         }
-        plant();
-    }
-
-    // build specific robot on demand
-    private void tryBuild(RobotType type) throws GameActionException
-    {
-        Direction buildDir = buildingDirection(type, 12,25);
-        if (buildDir != null) {
-            rc.buildRobot(type, buildDir);
-        }
     }
 
     private void tryWater() throws GameActionException {
@@ -145,19 +141,12 @@ class Gardener extends AbstractRobot {
         TreeInfo worstTree = null;
         float minHealth = Float.POSITIVE_INFINITY;
         for (TreeInfo treeInfo : trees) {
+            /* Finds the most damaged one */
             float _health = treeInfo.getHealth();
             float healthDiff = treeInfo.maxHealth - _health;
             if (_health < minHealth && healthDiff > MIN_TREE_HEALTH_DIFF && rc.canWater(treeInfo.location)) {
                 worstTree = treeInfo;
                 minHealth = _health;
-            }
-        }
-
-        /* Remove first found killed tree */
-        for (TreeInfo myTree : myTrees) {
-            if (myTree.health <= 0) {
-                myTrees.remove(myTree);
-                break;
             }
         }
 
@@ -178,13 +167,8 @@ class Gardener extends AbstractRobot {
     }
 
     private void plant() throws GameActionException {
-//        /* Let's not forget about our trees */
-//        if (myTrees.size() > 0) {
-//            tryWater();
-//        }
-
-        /* This gardener has enough trees to carry about already */
-        if (myTrees.size() >= wantedTrees) {
+        /* Let's not build if available position would be lost */
+        if (numPlantPositions() <= 1) {
             return;
         }
 
@@ -196,11 +180,26 @@ class Gardener extends AbstractRobot {
         /* Then we can build some new ones */
         try {
             /* Find available position */
-            Direction dir;
-            if (myTrees.size() == 0) {
-                dir = randomAvailableDirection(rc, 32);
-            } else {
-                dir = lastTreeDirection.rotateRightRads((float) (2 * Math.PI / 5));
+            Direction dir = null;
+
+            /* Try to build the first few trees in direction to enemy to block the bullets */
+            final float angularOffset = (float) (2f * Math.PI / MAX_TREES);
+            for (int i = 0; i < MAX_TREES; i++) {
+                if (i % 2 == 0) {
+                    dir = myBuildingDirection.rotateLeftRads(angularOffset * i / 2);
+                } else {
+                    dir = myBuildingDirection.rotateRightRads(angularOffset * (i + 1) / 2);
+                }
+                /* Direction found */
+                if (rc.canPlantTree(dir)) {
+                    indicate(currentLocation.add(dir, RobotType.GARDENER.bodyRadius
+                            + RobotType.GARDENER.strideRadius + GameConstants.BULLET_TREE_RADIUS), 128, 128, 256);
+                    break;
+                }
+                /* Lets try another direction */
+                indicate(currentLocation.add(dir, RobotType.GARDENER.bodyRadius
+                        + RobotType.GARDENER.strideRadius + GameConstants.BULLET_TREE_RADIUS), 256, 128, 128);
+                dir = null;
             }
 
             /* Cannot plant right now */
@@ -209,22 +208,22 @@ class Gardener extends AbstractRobot {
             }
 
             /* Plant the tree here */
-            if (rc.canPlantTree(dir)) {
-                rc.plantTree(dir);
-                MapLocation plantPos = currentLocation.add(dir, RobotType.GARDENER.bodyRadius
-                                + RobotType.GARDENER.strideRadius + GameConstants.BULLET_TREE_RADIUS);
-                TreeInfo treeInfo = rc.senseTreeAtLocation(plantPos);
-                System.out.println("info: "+treeInfo);
-                myTrees.add(treeInfo);
-//                ++numTrees;
-            }
-            lastTreeDirection = dir;
+            rc.plantTree(dir);
         } catch (GameActionException e) {
             e.printStackTrace();
         }
     }
 
-    private int startMovingRound;
+    private int numPlantPositions() {
+        int availablePositions = 0;
+        for (int i = 0; i < MAX_TREES; i++) {
+            Direction plantDir = myBuildingDirection.rotateLeftRads((float) (2 * Math.PI / MAX_TREES * i));
+            if (rc.canPlantTree(plantDir)) {
+                ++availablePositions;
+            }
+        }
+        return availablePositions;
+    }
 
     private void takePosition() throws GameActionException {
         if (lastLocation != null && currentRound - startMovingRound > 1 && currentSpeed < 0.2) {
@@ -248,92 +247,42 @@ class Gardener extends AbstractRobot {
     }
 
     private boolean canSettle() {
-        /* Count distance to archon */
-        final float dist = getClosestOurArchonDistance() / defenceDist;
-        if (dist < 1 && dist < Math.min(1, 0.2 + (currentRound - startMovingRound) / 100)) {
-            return false;
-        }
+//        /* Don't build too close to archon */
+//        final float dist = getClosestOurArchonDistance() / defenceDist;
+//        if (dist < 1 && dist < Math.min(1, 0.2 + (currentRound - startMovingRound) / 100)) {
+//            return false;
+//        }
 
-        /* Don't build to close to other gardeners */
+        /* Don't build too close to other gardeners */
         RobotInfo nearestGardener = findNearestRobot(robots, RobotType.GARDENER, ourTeam);
-        if (nearestGardener != null && currentLocation.distanceTo(nearestGardener.location) < 15) {
+        if (nearestGardener != null && currentLocation.distanceTo(nearestGardener.location)
+                < RobotType.GARDENER.bodyRadius + RobotType.GARDENER.strideRadius
+                + GameConstants.BULLET_TREE_RADIUS + BUILDING_GAP) {
             return false;
         }
 
         /* Count available positions */
-        int freePositions = 0;
-        Direction dir = randomAvailableDirection(rc, 32);
-        if (dir == null) {
-            dir = randomDirection();
-        }
-        for (int i = 0; i < MAX_TREES; i++) {
-            if (rc.canPlantTree(dir)) {
-                ++freePositions;
-            }
-            dir = dir.rotateRightRads((float) (2 * Math.PI / MAX_TREES));
-
-        }
-        return freePositions >= wantedTrees / 2;
-    }
-
-    private int numNotOurTreesVisible() {
-        int numNotOursTreesVisible = 0;
-        for (TreeInfo tree : trees) {
-            if (tree.team != ourTeam) {
-                ++numNotOursTreesVisible;
-            }
-        }
-        return numNotOursTreesVisible;
+        final int freePositions = numPlantPositions();
+        return freePositions >= MAX_TREES / 2;
     }
 
     private void newtonPath() throws GameActionException {
         MapLocation force = new MapLocation(0, 0);
 
-        final int gardenerMass = 256;
+        final int gardenerMass = 32;
         final int archonMass = 1024;
         final float treeMass = 1;
-        final float obstacleMass = 64;
-
 
         /* Add main force towards the destination away from our centroid */
         final float distFromArchons2 = ourArchonsCentroid.distanceSquaredTo(currentLocation);
-        force = force.add(myDirection, gardenerMass * archonMass / distFromArchons2);
-        force = force.add(myDirection, archonMass);
+        force = force.add(myPositionDirection, gardenerMass * archonMass / distFromArchons2);
+        force = force.add(myPositionDirection, archonMass);
 
         /* Force away from enemy centroid */
         final float distToArchons2 = enemyArchonsCentroid.distanceSquaredTo(currentLocation);
         force = force.subtract(enemyCentroidDirection, 0.5f * gardenerMass * archonMass / distToArchons2);
 
         /* Add pushing forces */
-//        final int sightRange = 7;
-//        final int step = 2;
-//        int row;
-//        for (int i = -sightRange; i < sightRange; i += step) {
-//            row = 0;
-//            for (int j = -sightRange; j < sightRange; j += step) {
-//                if (i == 0 && j == 0) {
-//                    continue;
-//                }
-//
-//                MapLocation shift = currentLocation.translate(i + ((row % 2 == 0) ? -step / 2f : 0f), j);
-//                if (currentLocation.distanceTo(shift) < sightRange/* && Math.random() < 0.3*/) {
-//                    if (rc.canMove(shift)) {
-//                        indicate(shift, 10, 10, 128);
-//                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
-//                        force = force.add(
-//                                currentLocation.directionTo(shift).radians,
-//                                gardenerMass * obstacleMass / distToDot2);
-//                    } else {
-//                        indicate(shift, 128, 10, 10);
-//                        final float distToDot2 = currentLocation.distanceSquaredTo(shift);
-//                        force = force.subtract(
-//                                currentLocation.directionTo(shift).radians,
-//                                gardenerMass * obstacleMass / distToDot2);
-//                    }
-//                }
-//                ++row;
-//            }
-//        }
         for (TreeInfo tree : trees) {
             final float distToTree2 = currentLocation.distanceSquaredTo(tree.location);
             force = force.subtract(
@@ -350,6 +299,8 @@ class Gardener extends AbstractRobot {
                     currentLocation.directionTo(robot.location).radians,
                     gardenerMass * gardenerMass / distToRobot2);
         }
+
+        /* Apply the resulting target position */
         tryMove(currentLocation.add(ZERO_LOCATION.directionTo(force), ZERO_LOCATION.distanceTo(force)));
     }
 

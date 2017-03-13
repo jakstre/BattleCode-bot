@@ -1,6 +1,8 @@
 package ImperiousArchon;
 import battlecode.common.*;
 
+import static ImperiousArchon.Utils.REPORT_CHANNEL;
+
 public class Scout extends AbstractRobot {
 
     public boolean SHOOTJACKS = true;
@@ -29,6 +31,7 @@ public class Scout extends AbstractRobot {
         }
 
         // The code you want your robot to perform every round should be in this loop
+        //noinspection InfiniteLoopStatement
         while (true)
         {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
@@ -86,7 +89,7 @@ public class Scout extends AbstractRobot {
         rc.broadcast(REPORT_CHANNEL, rc.getRoundNum());
         rc.broadcast(REPORT_CHANNEL +1,1);
         rc.broadcastFloat(REPORT_CHANNEL +2, power);
-        broadCastLocation(loc, REPORT_CHANNEL +3);
+        broadCastLocation(REPORT_CHANNEL +3, loc);
     }
 
     /*

@@ -12,6 +12,10 @@ import static ImperiousArchon.Utils.randomDirection;
 public class Soldier extends  AbstractRobot
 {
 
+    private int startMovingRound;
+    private int lastDirectionChange;
+
+
     public Soldier(RobotController rc)
     {
         super(rc);
@@ -19,9 +23,9 @@ public class Soldier extends  AbstractRobot
     @Override
     void run() throws GameActionException
     {
-
-//        rallyPoint = enemyArchonsCentroid;
+        rallyPoint = enemyArchonsCentroid;
         // The code you want your robot to perform every round should be in this loop
+        //noinspection InfiniteLoopStatement
         while (true) {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
@@ -33,11 +37,12 @@ public class Soldier extends  AbstractRobot
                     //checkShake();
                     if (rallyPoint != null)
                     {
-//                        moveTo(rallyPoint);
                         move();
                     }
-                    else
+                    else {
                         randomWalk();
+//                        wanderWalk();
+                    }
                 }
 
                 // Clock.yield() makes the robot wait until the next turn, then it will perform this loop again
@@ -51,40 +56,59 @@ public class Soldier extends  AbstractRobot
     @Override
     void readBroadcast() throws GameActionException
     {
-        if (!checkHelpCalls())
+        if (!checkHelpCalls()) {
             checkReports();
+        } else {
+            startMovingRound = currentRound;
+        }
     }
 
-    private int lastDirectionChange;
-
     private void move() throws GameActionException {
+        /* If stuck by a tree, shoot it down! */
+        if (lastLocation != null && currentRound - startMovingRound > 1 && currentSpeed < 0.2) {
+            float dist = Float.POSITIVE_INFINITY;
+            TreeInfo closest = null;
+            for (TreeInfo tree : trees) {
+                if (tree.team != ourTeam) {
+                    float _dist = currentLocation.distanceTo(tree.location);
+                    if (_dist < dist) {
+                        closest = tree;
+                    }
+                }
+            }
+
+            if (closest != null) {
+                rc.move(currentLocation.directionTo(closest.location));
+                rc.fireSingleShot(currentLocation.directionTo(closest.location));
+                return;
+            }
+        }
+
+        if (!moveTo(rallyPoint)) {
+            wanderWalk();
+        }
+    }
+
+    private void wanderWalk() throws GameActionException {
         MapLocation force = new MapLocation(0, 0);
 
         final int myMass = 16;
-        final int targetMass = 512;
         final int wanderForce = 128;
-        final float obstacleMass = 1;
 
-        if (rallyPoint != null) {
-            /* Add main force towards the destination */
-            force = force.add(currentLocation.directionTo(rallyPoint), targetMass);
-
-            /* Rally point reached, try to do other things */
-            if (currentLocation.distanceTo(rallyPoint) < 10) {
-                rallyPoint = null;
+        if (currentRound - lastDirectionChange > 1
+                && (currentDirection == null || !rc.canMove(currentDirection) || currentSpeed < 0.1)) {
+            Direction randDir = randomAvailableDirection(rc, 16);
+            if (randDir == null) {
+                randDir = randomDirection();
             }
+            if (currentDirection != null) {
+                force = force.add((float) (currentDirection.radians + Math.PI / 2), 2 * wanderForce);
+            }
+            force = force.add(randDir, wanderForce);
+            force = force.add(currentLocation.directionTo(enemyArchonsCentroid), 0.3f * wanderForce);
+            lastDirectionChange = currentRound;
         } else {
-            if (currentRound - lastDirectionChange > 1
-                    && (currentDirection == null || !rc.canMove(currentDirection) || currentSpeed < 0.1)) {
-                Direction randDir = randomAvailableDirection(rc, 16);
-                if (randDir == null) {
-                    randDir = randomDirection();
-                }
-                force = force.add(randDir, wanderForce);
-                lastDirectionChange = currentRound;
-            } else {
-                force = force.add(currentDirection, wanderForce);
-            }
+            force = force.add(currentDirection, wanderForce);
         }
 
         /* Add pushing forces */
@@ -117,8 +141,6 @@ public class Soldier extends  AbstractRobot
     */
     boolean fight() throws GameActionException
     {
-        Team enemy = rc.getTeam().opponent();
-        MapLocation myLocation = rc.getLocation();
         RobotInfo nearestGardener = null;
         RobotInfo nearestArchon = null;
         RobotInfo nearestDanger = null;
@@ -132,7 +154,7 @@ public class Soldier extends  AbstractRobot
 
         for (RobotInfo r:robots)
         {
-            if (r.getTeam() == enemy)
+            if (r.getTeam() == enemyTeam)
             {
                 enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
@@ -157,7 +179,7 @@ public class Soldier extends  AbstractRobot
 
         if (allyPower<=enemyPower)
         {
-            callHelp(nearestEnemy.location,allyPower,enemyPower);
+            callHelp(nearestEnemy.location, allyPower, enemyPower);
         }
 
         MapLocation combatPosition = null;
@@ -168,9 +190,9 @@ public class Soldier extends  AbstractRobot
         {
             MapLocation dangerLoc = nearestDanger.getLocation();
 
-            if (nearestLumberjack != null && myLocation.distanceTo(nearestLumberjack.getLocation()) < safeDistance)
+            if (nearestLumberjack != null && currentLocation.distanceTo(nearestLumberjack.getLocation()) < safeDistance)
             {
-                combatPosition = nearestLumberjack.getLocation().add(nearestLumberjack.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                combatPosition = nearestLumberjack.getLocation().add(nearestLumberjack.getLocation().directionTo(currentLocation).rotateLeftDegrees(5), safeDistance);
                 target=nearestDanger;
                 //shoot(nearestLumberjack);
             }
@@ -178,7 +200,7 @@ public class Soldier extends  AbstractRobot
             {
                 indicate(nearestDanger.location,255,0,255);
                 safeDistance = rc.getType().bodyRadius + nearestDanger.getType().bodyRadius+ GameConstants.BULLET_SPAWN_OFFSET;
-                combatPosition = dangerLoc.add(dangerLoc.directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                combatPosition = dangerLoc.add(dangerLoc.directionTo(currentLocation).rotateLeftDegrees(5), safeDistance);
                 target = nearestDanger;
                 //shoot(nearestDanger);
             }
@@ -188,7 +210,7 @@ public class Soldier extends  AbstractRobot
                 RobotType t = nearestDanger.getType();
                 // safeDistance = t.sensorRadius + RobotType.SCOUT.bodyRadius + GameConstants.BULLET_SPAWN_OFFSET;
                 safeDistance = t.sensorRadius;
-                combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                combatPosition = rc.getLocation().add(nearestDanger.getLocation().directionTo(currentLocation).rotateLeftDegrees(5), safeDistance);
                 target = nearestDanger;
                 // call for help
             }
@@ -204,7 +226,7 @@ public class Soldier extends  AbstractRobot
                 indicate(nearestGardener.getLocation(),0,0,255);
                 target=nearestGardener;
                 safeDistance = rc.getType().bodyRadius + RobotType.GARDENER.bodyRadius+ GameConstants.BULLET_SPAWN_OFFSET;
-                combatPosition = target.getLocation().add(target.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                combatPosition = target.getLocation().add(target.getLocation().directionTo(currentLocation).rotateLeftDegrees(5), safeDistance);
 
                 //shoot(nearestGardener);
             }
@@ -214,7 +236,7 @@ public class Soldier extends  AbstractRobot
                 target = nearestArchon;
                 safeDistance = rc.getType().bodyRadius + RobotType.ARCHON.bodyRadius+ GameConstants.BULLET_SPAWN_OFFSET;
                 //shoot(nearestArchon);
-                combatPosition = target.getLocation().add(target.getLocation().directionTo(myLocation).rotateLeftDegrees(5), safeDistance);
+                combatPosition = target.getLocation().add(target.getLocation().directionTo(currentLocation).rotateLeftDegrees(5), safeDistance);
 
             }
             else

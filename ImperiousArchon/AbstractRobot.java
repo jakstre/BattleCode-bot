@@ -1,6 +1,9 @@
 package ImperiousArchon;
 import battlecode.common.*;
 
+import static ImperiousArchon.Utils.HELP_CHANNEL;
+import static ImperiousArchon.Utils.REPORT_CHANNEL;
+
 /**
  * Base class for all the robots in the game.
  */
@@ -26,9 +29,6 @@ abstract class AbstractRobot {
     Team ourTeam, enemyTeam;
     boolean avoidingObstacle = false;
     boolean wentLeft = false;
-
-    final int REPORT_CHANNEL = 10;
-    final int HELP_CHANNEL = 20;
 
     boolean blocked = false;
     boolean left = false;
@@ -67,7 +67,7 @@ abstract class AbstractRobot {
         return new MapLocation(x / locations.length, y / locations.length);
     }
 
-    void broadCastLocation(MapLocation loc, int offset) throws GameActionException
+    void broadCastLocation(int offset, MapLocation loc) throws GameActionException
     {
         rc.broadcastFloat(offset,loc.x);
         rc.broadcastFloat(offset+1,loc.y);
@@ -95,36 +95,33 @@ abstract class AbstractRobot {
                 return;
         }
 
-        rc.broadcast(HELP_CHANNEL, rc.getRoundNum());
-        rc.broadcast(HELP_CHANNEL +1,1);
+        rc.broadcastInt(HELP_CHANNEL, currentRound);
+        rc.broadcastInt(HELP_CHANNEL +1, 1);
         rc.broadcastFloat(HELP_CHANNEL +2, allyPower);
         rc.broadcastFloat(HELP_CHANNEL +3, enemyPower);
-        broadCastLocation(loc, HELP_CHANNEL +4);
+        broadCastLocation(HELP_CHANNEL +4, loc);
     }
 
     boolean checkHelpCalls() throws GameActionException {
         int round = rc.readBroadcast(HELP_CHANNEL);
         int active = rc.readBroadcast(HELP_CHANNEL +1);
 
-        if (active>0 && rc.getRoundNum() - round < 50)
+        if (active > 0 && currentRound - round < 50)
         {
-            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+            if (rallyPoint != null && rc.canSenseLocation(rallyPoint)) {
                 boolean found = false;
-                for (RobotInfo robot: robots)
-                {
+                for (RobotInfo robot : robots) {
                     if (robot.team == enemyTeam)
-                        found=true;
+                        found = true;
                 }
                 if (!found) {
                     cancelBroadcast(HELP_CHANNEL);
                     return false;
                 }
             }
-            rallyPoint = readBroadCastLocation(HELP_CHANNEL +4);
+            rallyPoint = readBroadCastLocation(HELP_CHANNEL + 4);
             return true;
-        }
-        else
-        {
+        } else {
             cancelBroadcast(HELP_CHANNEL);
             return false;
         }
@@ -134,14 +131,14 @@ abstract class AbstractRobot {
     {
         int round = rc.readBroadcast(REPORT_CHANNEL);
         int active = rc.readBroadcast(REPORT_CHANNEL +1);
-        if (rc.getRoundNum() - round < 120 && active > 0)
+        if (currentRound - round < 120 && active > 0)
         {
-            if (rallyPoint!=null && rc.canSenseLocation(rallyPoint)) {
+            if (rallyPoint != null && rc.canSenseLocation(rallyPoint)) {
                 boolean found = false;
-                for (RobotInfo robot: robots)
+                for (RobotInfo robot : robots)
                 {
                     if (robot.team == enemyTeam)
-                        found=true;
+                        found = true;
                 }
                 if (!found) {
                     cancelBroadcast(REPORT_CHANNEL);
@@ -150,15 +147,13 @@ abstract class AbstractRobot {
             }
             rallyPoint = readBroadCastLocation(REPORT_CHANNEL +3);
             return true;
-        }
-        else
-        {
+        } else {
             cancelBroadcast(REPORT_CHANNEL);
             return false;
         }
     }
 
-    void cancelBroadcast(int offset) throws GameActionException {
+    private void cancelBroadcast(int offset) throws GameActionException {
         rc.broadcast(offset, rc.getRoundNum());
         rc.broadcast(offset+1, 0);
         rallyPoint = null;
@@ -190,12 +185,11 @@ abstract class AbstractRobot {
 
     void makePath(Float direction, int sightRange) {
         MapLocation origin = currentLocation;
-        final int range = sightRange;
         final int step = 2;
         int row;
-        for (int i = -range; i < range; i += step) {
+        for (int i = -sightRange; i < sightRange; i += step) {
             row = 0;
-            for (int j = -range; j < range; j += step) {
+            for (int j = -sightRange; j < sightRange; j += step) {
                 MapLocation shift = origin.translate(i + ((row % 2 == 0) ? -0 / 2f : 0f), j);
                 if (origin.distanceTo(shift) < sightRange) {
                     if (rc.canMove(shift)) {
@@ -227,7 +221,7 @@ abstract class AbstractRobot {
         return dist;
     }
 
-    float getFarthestEnemyArchonDistance() {
+    private float getFarthestEnemyArchonDistance() {
         float dist = Float.NEGATIVE_INFINITY;
         for (MapLocation ourInitialArchonLocation : enemyInitialArchonLocations) {
             float _dist = rc.getLocation().distanceTo(ourInitialArchonLocation);
@@ -824,7 +818,7 @@ abstract class AbstractRobot {
     Direction buildingDirection(RobotType type, int maxAttempts, float angularOffset)
     {
         if (angularOffset == 0) {
-            angularOffset = (float) (2 * Math.PI / maxAttempts);
+            angularOffset = 360f / maxAttempts;
         }
 
         Direction enemyCentroidDirection = ourArchonsCentroid.directionTo(enemyArchonsCentroid);
@@ -850,4 +844,32 @@ abstract class AbstractRobot {
         }
         return null;
     }
+
+    int numNotOurTreesVisible() {
+        int numNotOursTreesVisible = 0;
+        for (TreeInfo tree : trees) {
+            if (tree.team != ourTeam) {
+                ++numNotOursTreesVisible;
+            }
+        }
+        return numNotOursTreesVisible;
+    }
+
+    void checkHelpNeeds() throws GameActionException {
+        float enemyPower = 0f;
+        float allyPower = 0f;
+
+        for (RobotInfo r : robots) {
+            if (r.getTeam() == enemyTeam) {
+                enemyPower += Utils.unitStrength(r.type);
+            } else {
+                allyPower += Utils.unitStrength(r.type);
+            }
+        }
+
+        if (enemyPower > 0) {
+            callHelp(currentLocation, allyPower, enemyPower);
+        }
+    }
+
 }

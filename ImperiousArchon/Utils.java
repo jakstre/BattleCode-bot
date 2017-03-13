@@ -9,6 +9,8 @@ class Utils {
 
     static final int BUILD_CHANNEL = 0;
     static final int DIRECTION_CHANNEL = 1;
+    static final int REPORT_CHANNEL = 10;
+    static final int HELP_CHANNEL = 20;
 
     static final MapLocation ZERO_LOCATION = new MapLocation(0, 0);
 
