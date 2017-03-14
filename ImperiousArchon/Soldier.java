@@ -23,14 +23,15 @@ public class Soldier extends  AbstractRobot
     @Override
     void run() throws GameActionException
     {
-        rallyPoint = enemyArchonsCentroid;
+
         // The code you want your robot to perform every round should be in this loop
         //noinspection InfiniteLoopStatement
         while (true) {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
                 preloop();
-
+                if (currentRound<80)
+                    rallyPoint = enemyArchonsCentroid;
                 boolean fought = fight();
                 if (!fought)
                 {
@@ -65,7 +66,7 @@ public class Soldier extends  AbstractRobot
 
     private void move() throws GameActionException {
         /* If stuck by a tree, shoot it down! */
-        if (lastLocation != null && currentRound - startMovingRound > 1 && currentSpeed < 0.2) {
+       /* if (lastLocation != null && currentRound - startMovingRound > 1 && currentSpeed < 0.2) {
             float dist = Float.POSITIVE_INFINITY;
             TreeInfo closest = null;
             for (TreeInfo tree : trees) {
@@ -82,7 +83,7 @@ public class Soldier extends  AbstractRobot
                 rc.fireSingleShot(currentLocation.directionTo(closest.location));
                 return;
             }
-        }
+        }*/
 
         if (!moveTo(rallyPoint)) {
             wanderWalk();
@@ -156,15 +157,19 @@ public class Soldier extends  AbstractRobot
         {
             if (r.getTeam() == enemyTeam)
             {
-                enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
                     nearestGardener = r;
                 else if (nearestArchon == null && r.getType() == RobotType.ARCHON)
                     nearestArchon = r;
                 else if (nearestLumberjack == null && r.getType() == RobotType.LUMBERJACK)
                     nearestLumberjack = r;
-                if (nearestDanger == null && r.getType().canAttack())
-                    nearestDanger = r;
+                if (r.getType().canAttack() && (canHit(r)|| r.getType() == RobotType.LUMBERJACK))
+                {
+                    if (nearestDanger == null)
+                        nearestDanger = r;
+                    enemyPower+=Utils.unitStrength(r.type);
+                }
+
                 if (nearestEnemy == null)
                     nearestEnemy = r;
             }
@@ -196,7 +201,8 @@ public class Soldier extends  AbstractRobot
                 target=nearestDanger;
                 //shoot(nearestLumberjack);
             }
-            else if (canBeat(nearestDanger))
+
+            if (canBeat(nearestDanger))
             {
                 indicate(nearestDanger.location,255,0,255);
                 safeDistance = rc.getType().bodyRadius + nearestDanger.getType().bodyRadius+ GameConstants.BULLET_SPAWN_OFFSET;
@@ -214,6 +220,7 @@ public class Soldier extends  AbstractRobot
                 target = nearestDanger;
                 // call for help
             }
+
             //else return false;
         }
 

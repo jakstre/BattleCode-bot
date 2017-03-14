@@ -14,9 +14,11 @@ class Gardener extends AbstractRobot {
     private static final float MIN_TREE_HEALTH_DIFF = 5;
 
     private static final float DEFAULT_SOLDIER_PROBABILITY = 0.08f;
-    private static final float DEFAULT_TANK_PROBABILITY = 0.03f;
-    private static final float DEFAULT_SCOUT_PROBABILITY = 0.005f;
+    private static final float DEFAULT_TANK_PROBABILITY = 0.06f;
+    private static final float DEFAULT_SCOUT_PROBABILITY = 0.006f;
     private static final float DEFAULT_LUMBERJACK_PROBABILITY = 0.0f;
+    private static final float DEFAULT_NOTHING_PROBABILITY = 1-(DEFAULT_SOLDIER_PROBABILITY+DEFAULT_SCOUT_PROBABILITY
+    +DEFAULT_TANK_PROBABILITY+DEFAULT_LUMBERJACK_PROBABILITY);
     //NOTE: this constant has a huge impact on fight result, but what is the "right" value?
     private static final float BUILDING_GAP = 4.5f;
 
@@ -29,7 +31,7 @@ class Gardener extends AbstractRobot {
     private int[] wantedRobots = {1000, 300, 2, 2};
     private float[] buildProbs = {
             DEFAULT_SOLDIER_PROBABILITY, DEFAULT_TANK_PROBABILITY,
-            DEFAULT_SCOUT_PROBABILITY, DEFAULT_LUMBERJACK_PROBABILITY};
+            DEFAULT_SCOUT_PROBABILITY, DEFAULT_LUMBERJACK_PROBABILITY, DEFAULT_NOTHING_PROBABILITY};
     private GardenerState state = GardenerState.POSITIONING;
     private Float myPositionDirection;
     private Direction myBuildingDirection;
@@ -52,6 +54,28 @@ class Gardener extends AbstractRobot {
         }
     }
 
+    private void initProbs()
+    {
+        buildProbs[0]=Math.max(DEFAULT_SOLDIER_PROBABILITY-0.002f*(currentRound-100),0.02f);
+        buildProbs[1]=Math.min(DEFAULT_TANK_PROBABILITY+0.001f*currentRound,0.1f);
+
+        for (RobotInfo r : robots) {
+            if (r.getTeam() == enemyTeam) {
+                buildProbs[0] = 1;
+            }
+        }
+        float sum =0f;
+        for(float p:buildProbs)
+            sum+=p;
+
+        //normalize
+        if (sum>1)
+            for(int i = 0 ; i < buildProbs.length ; i++)
+                buildProbs[i]/=sum;
+        else
+            buildProbs[4]=1-sum;
+    }
+
     @Override
     void run() throws GameActionException {
         /* The code you want your robot to perform every round should be in this loop */
@@ -60,6 +84,7 @@ class Gardener extends AbstractRobot {
             // Try/catch blocks stop unhandled exceptions, which cause your robot to explode
             try {
                 preloop();
+                initProbs();
 
                 myBuildingDirection = currentLocation.directionTo(enemyArchonsCentroid);
 
@@ -119,7 +144,7 @@ class Gardener extends AbstractRobot {
         return buildIndex >= priorityBuildQueue.size();
     }
 
-    private void tryBuild() throws GameActionException {
+    /*private void tryBuild() throws GameActionException {
         for (RobotType orderedType : RobotPlayer.orderedTypes) {
             Direction dir = buildingDirection(orderedType, 12,0);
             if (dir == null) {
@@ -134,6 +159,45 @@ class Gardener extends AbstractRobot {
                 ++numBuild[robotID];
             }
         }
+    }*/
+
+    private void tryBuild() throws GameActionException
+    {
+        RobotType type= roulette();
+        if (type==null)
+            return;
+        Direction dir = buildingDirection(type, 12,0);
+        if (dir == null) {
+            return;
+        }
+
+        int robotID = RobotPlayer.typeToInt.get(type);
+        if (numBuild[robotID] < wantedRobots[robotID] && rc.canBuildRobot(type, dir) )
+        {
+            rc.buildRobot(type, dir);
+            ++numBuild[robotID];
+        }
+
+    }
+
+    //decide what to build this time
+    private RobotType roulette()
+    {
+        double sum = 0;
+        for (int i=0; i < buildProbs.length; i++) {
+            sum+=buildProbs[i];
+        }
+
+        double rnd =Math.random();
+        for (RobotType orderedType : RobotPlayer.orderedTypes)
+        {
+            int robotID = RobotPlayer.typeToInt.get(orderedType);
+            if(rnd < buildProbs[robotID])
+                 return orderedType;
+             else
+                 rnd-=buildProbs[robotID];
+        }
+        return null;
     }
 
     private void tryWater() throws GameActionException {

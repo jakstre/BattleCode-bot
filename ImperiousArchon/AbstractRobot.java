@@ -173,9 +173,9 @@ abstract class AbstractRobot {
             if (rc.getRoundNum() >= rc.getRoundLimit() - 1
                     || (int) (bullets / exchangeRate) + vps >= GameConstants.VICTORY_POINTS_TO_WIN) {
                 rc.donate(bullets);
-            } else if (bullets > 1000 && rc.getRoundNum() > 200) {
+            } else if (bullets > 800 && rc.getRoundNum() > 200) {
                 /* We have surplus of bullets, let's donate them */
-                int newVps = (int) ((bullets - 1000) / exchangeRate);
+                int newVps = (int) ((bullets - 800) / exchangeRate);
                 rc.donate(newVps * exchangeRate);
             }
         } catch (GameActionException e) {
@@ -617,6 +617,18 @@ abstract class AbstractRobot {
         return 1; //Bullet will probably miss (can be dodged)
     }
 
+    boolean canHit(RobotInfo target)
+    {
+        MapLocation targetLoc = target.getLocation();
+        MapLocation myLocation = rc.getLocation();
+        Direction dir = myLocation.directionTo(targetLoc);
+        float dist = myLocation.distanceTo(targetLoc);
+        int shot = processShot(dir, target);
+
+        if (shot < 0)
+            return false;
+        return true;
+    }
     boolean canShootMe(RobotInfo enemy)
     {
         float hitDist=-5;
@@ -859,8 +871,11 @@ abstract class AbstractRobot {
         float enemyPower = 0f;
         float allyPower = 0f;
 
+        RobotInfo threat = null;
         for (RobotInfo r : robots) {
             if (r.getTeam() == enemyTeam) {
+                if (threat ==null)
+                    threat = r;
                 enemyPower += Utils.unitStrength(r.type);
             } else {
                 allyPower += Utils.unitStrength(r.type);
@@ -868,7 +883,7 @@ abstract class AbstractRobot {
         }
 
         if (enemyPower > 0) {
-            callHelp(currentLocation, allyPower, enemyPower);
+            callHelp(threat.location, allyPower, enemyPower);
         }
     }
 

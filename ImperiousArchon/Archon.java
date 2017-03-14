@@ -87,11 +87,12 @@ class Archon extends AbstractRobot {
                 }
                 final int numBuildFromQueue = rc.readBroadcastInt(Utils.BUILD_CHANNEL);
                 if (dir != null
-                        && ((rc.canHireGardener(dir) && (numGardeners <= 0 || numGardeners <= 4 && rc.getTeamBullets() >= 150))
+                        && (rc.getTeamBullets() >= 150
+                        && ( numGardeners <= 3))
                         || (numGardeners < MAX_GARDENERS
-                        && rc.canHireGardener(dir)
+                        && rc.getTeamBullets() >= 150
                         && Math.random() < .1
-                        && numBuildFromQueue >= priorityBuildQueue.size()))) {
+                        && numBuildFromQueue >= priorityBuildQueue.size())) {
                     rc.hireGardener(dir);
                     rc.broadcastFloat(DIRECTION_CHANNEL, randomDir());
 //                    rc.broadcastFloat(DIRECTION_CHANNEL, dir.radians);

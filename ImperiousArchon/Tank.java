@@ -63,7 +63,8 @@ public class Tank extends  AbstractRobot
 
     @Override
     void readBroadcast() throws GameActionException {
-
+        if (!checkHelpCalls())
+            checkReports();
     }
 
 
@@ -114,7 +115,7 @@ public class Tank extends  AbstractRobot
 
         if (allyPower<=enemyPower)
         {
-            // loosing fight, call for help
+            callHelp(nearestEnemy.location, allyPower, enemyPower);
         }
 
         MapLocation combatPosition = null;
