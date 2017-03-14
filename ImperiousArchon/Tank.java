@@ -53,7 +53,7 @@ public class Tank extends  AbstractRobot
         if (!rc.canMove(dest))
             return false;
 
-        TreeInfo[] bump = rc.senseNearbyTrees(dest, RobotType.TANK.bodyRadius, rc.getTeam());
+        TreeInfo[] bump = rc.senseNearbyTrees(dest, RobotType.TANK.bodyRadius+0.0001f, rc.getTeam());
         if (bump != null && bump.length > 0)
             return false;
 
@@ -89,17 +89,21 @@ public class Tank extends  AbstractRobot
 
         for (RobotInfo r:robots)
         {
-            if (r.getTeam() == enemy)
+            if (r.getTeam() == enemyTeam)
             {
-                enemyPower+=Utils.unitStrength(r.type);
                 if (nearestGardener == null && r.getType() == RobotType.GARDENER)
                     nearestGardener = r;
                 else if (nearestArchon == null && r.getType() == RobotType.ARCHON)
                     nearestArchon = r;
                 else if (nearestLumberjack == null && r.getType() == RobotType.LUMBERJACK)
                     nearestLumberjack = r;
-                if (nearestDanger == null && r.getType().canAttack())
-                    nearestDanger = r;
+                if (r.getType().canAttack() && (canHit(r)|| r.getType() == RobotType.LUMBERJACK))
+                {
+                    if (nearestDanger == null)
+                        nearestDanger = r;
+                    enemyPower+=Utils.unitStrength(r.type);
+                }
+
                 if (nearestEnemy == null)
                     nearestEnemy = r;
             }

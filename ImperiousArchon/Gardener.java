@@ -60,8 +60,8 @@ class Gardener extends AbstractRobot {
         buildProbs[1]=Math.min(DEFAULT_TANK_PROBABILITY+0.001f*currentRound,0.1f);
 
         for (RobotInfo r : robots) {
-            if (r.getTeam() == enemyTeam) {
-                buildProbs[0] = 1;
+            if (r.getTeam() == enemyTeam && r.type==RobotType.SOLDIER) {
+                buildProbs[0] = 0.85f;
             }
         }
         float sum =0f;

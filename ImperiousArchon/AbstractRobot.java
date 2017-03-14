@@ -365,7 +365,7 @@ abstract class AbstractRobot {
         float damage;
 
         // First, try intended direction
-        if (rc.canMove(dest))
+        if (canMove(dest))
         {
             damage = damageAtLocation(dest);
             if (damage > 0 && damage < leastDamage)
@@ -391,7 +391,7 @@ abstract class AbstractRobot {
             // Try the offset of the left side
             while (currentCheck <= checksLeft) {
                 dest = here.add(dir.rotateLeftDegrees(degreeOffset * currentCheck), dist);
-                if (rc.canMove(dest)) {
+                if (canMove(dest)) {
                     damage = damageAtLocation(dest);
                     if (damage > 0 && damage < leastDamage) {
                         leastDamage = damage;
@@ -412,7 +412,7 @@ abstract class AbstractRobot {
             while (currentCheck <= checksRight)
             {
                 dest = here.add(dir.rotateRightDegrees(degreeOffset*currentCheck), dist);
-                if (rc.canMove(dest))
+                if (canMove(dest))
                 {
                     damage = damageAtLocation(dest);
                     if (damage > 0 && damage < leastDamage)
@@ -439,7 +439,7 @@ abstract class AbstractRobot {
             if (currentCheck <= checksLeft)
             {
                 dest = here.add(dir.rotateLeftDegrees(degreeOffset*currentCheck), dist);
-                if (rc.canMove(dest))
+                if (canMove(dest))
                 {
                     damage = damageAtLocation(dest);
                     if (damage > 0 && damage < leastDamage)
@@ -463,7 +463,7 @@ abstract class AbstractRobot {
             if (currentCheck <= checksRight)
             {
                 dest = here.add(dir.rotateRightDegrees(degreeOffset*currentCheck), dist);
-                if (rc.canMove(dest))
+                if (canMove(dest))
                 {
                     damage = damageAtLocation(dest);
                     if (damage > 0 && damage < leastDamage)
