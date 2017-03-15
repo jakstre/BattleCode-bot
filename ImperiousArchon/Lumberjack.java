@@ -37,9 +37,10 @@ class Lumberjack extends AbstractRobot {
                         RobotType.LUMBERJACK.bodyRadius + GameConstants.LUMBERJACK_STRIKE_RADIUS);
                 boolean safe=true;
                 for (RobotInfo r:robots) {
-                    if (r.getTeam() == ourTeam)
-                        safe =false;
-                    break;
+                    if (r.getTeam() == ourTeam) {
+                        safe = false;
+                        break;
+                    }
                 }
                 if (robots.length > 0 && safe && !rc.hasAttacked()) {
                     // Use strike() to hit all nearby robots!
